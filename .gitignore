@@ -1,0 +1,105 @@
+# Root workspace backup policy
+# Keep source and durable docs; ignore secrets, personal data, caches, build outputs, and embedded repos.
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+~$*
+
+# Secrets and machine-local configuration
+.env
+.env.*
+*.local
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.kdbx
+.npmrc
+.pypirc
+.netrc
+id_rsa
+id_ed25519
+
+# Logs and runtime state
+*.log
+*.log.*
+*.pid
+*.pid.lock
+*.seed
+*.stackdump
+*.jsonl
+
+# Python artifacts
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/.venv/
+**/venv/
+
+# JavaScript / TypeScript artifacts
+**/node_modules/
+**/.next/
+**/.turbo/
+**/.parcel-cache/
+**/coverage/
+**/dist/
+**/build/
+**/out/
+**/*.tsbuildinfo
+
+# Local databases and test output
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/artifactspytest_tmp/
+
+# Embedded git repositories and archived repos
+archives/
+apps/pathos-platform/backend/
+apps/pathos-platform/frontend/
+apps/pathos-platform/desktop-legacy-copy/
+n8n-lab/
+pathos-pipeline-operator/
+
+# Workspace-private and generated top-level content
+.claude/
+artifacts/
+ChatGPTSavedMemories/
+codex-logs/
+CustomGPT's/
+DeveloperNotes/
+FedPath AI/
+GitHub/
+Images/
+Master Plans/
+master-plans/
+miscTestFiles/
+personal/
+Planning/
+screenshots/
+storyMode/
+tmp/
+
+# Pipeline runtime output
+dev-pipeline/ai-pipeline/
+dev-pipeline/archived-runs/
+dev-pipeline/logs/
+dev-pipeline/runs/
+dev-pipeline/notifications.log
+
+# Sensitive exports
+joriel_chatgpt_memory_export_2025-12-13.pdf
