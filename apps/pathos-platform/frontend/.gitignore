@@ -1,0 +1,82 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# monorepo dependencies
+**/node_modules/
+
+# build outputs
+**/build/
+**/dist/
+**/out/
+**/.next/
+
+# electron packaging outputs
+release/
+releases/
+**/release/
+**/releases/
+
+# installers / binaries
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# generated downloads
+public/downloads/*
+
+# keep artifacts patches tracked; ignore only binary/archive blobs there
+artifacts/**/*.exe
+artifacts/**/*.msi
+artifacts/**/*.dmg
+artifacts/**/*.AppImage
+artifacts/**/*.zip
+artifacts/**/*.7z
+artifacts/**/*.tar
+artifacts/**/*.tar.gz
+artifacts/**/*.tgz
+artifacts/**/*.tar.bz2
+artifacts/**/*.tbz2
+artifacts/**/*.bin
+_local_artifacts/
+artifacts/**/*.patch
+artifacts/verify-shared-parity-*/

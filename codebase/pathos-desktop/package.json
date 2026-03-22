@@ -1,0 +1,50 @@
+{
+  "name": "pathos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal PathOS Desktop shell for USAJOBS.",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "dist": "electron-builder --win nsis",
+    "package": "pnpm run dist",
+    "build": "electron-builder --dir",
+    "lint": "set ESLINT_USE_FLAT_CONFIG=false&& eslint .",
+    "lint:fix": "set ESLINT_USE_FLAT_CONFIG=false&& eslint . --fix",
+    "typecheck": "tsc -b",
+    "typecheck:watch": "tsc -b -w",
+    "test": "vitest",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "build": {
+    "appId": "com.pathos.desktop",
+    "productName": "PathOS Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "src/preload-benefits-popout.js",
+      "package.json"
+    ],
+    "extraResources": [
+      "src/preload-benefits-popout.js"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "@vitest/coverage-v8": "^4.0.18",
+    "electron": "39.3.0",
+    "electron-builder": "^26.4.0",
+    "eslint": "^9.39.2",
+    "jsdom": "^28.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

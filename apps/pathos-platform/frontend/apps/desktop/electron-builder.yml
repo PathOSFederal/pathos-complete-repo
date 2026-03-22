@@ -1,0 +1,55 @@
+# ============================================================================
+# electron-builder configuration for PathOS Desktop
+# ============================================================================
+# Run: pnpm -C apps/desktop package
+# Output: apps/desktop/release/
+# ============================================================================
+
+appId: com.pathos.desktop
+productName: PathOS Desktop
+copyright: Copyright PathOS Federal
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/preload.cjs
+  - "!node_modules/**/*"
+
+# Point to the compiled Electron main process entry (.cjs so it loads as CommonJS)
+main: dist/electron/main.cjs
+
+# Extra files to include in the asar
+extraFiles:
+  - from: dist/renderer
+    to: dist/renderer
+    filter:
+      - "**/*"
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Office
+
+# NSIS installer settings (Windows)
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

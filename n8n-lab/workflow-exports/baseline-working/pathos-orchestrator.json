@@ -1,0 +1,917 @@
+{
+  "name": "pathos-orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pathos-orchestrator",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "801dce43-3ad9-4514-92f4-e66f757b217a",
+      "name": "Webhook",
+      "webhookId": "3794a979-a1f1-49cd-8e31-191d9ecf8fae"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5c7a6b0f-3394-4e49-8a95-6a08e86660d9",
+              "name": "repoPath",
+              "value": "={{ $json.body.repoPath }}",
+              "type": "string"
+            },
+            {
+              "id": "aea94926-b3f8-4db5-a076-bec6763ddd0d",
+              "name": "goal",
+              "value": "={{ $json.body.goal }}",
+              "type": "string"
+            },
+            {
+              "id": "acec8973-ceb1-4527-8ff8-ccb1323e5c53",
+              "name": "dayNumber",
+              "value": "={{ $json.body.dayNumber }}",
+              "type": "string"
+            },
+            {
+              "id": "e0e7beff-a4fb-452d-9d92-ed0bc580f684",
+              "name": "branchName",
+              "value": "={{ $json.body.branchName }}",
+              "type": "string"
+            },
+            {
+              "id": "f337a190-38ab-4d5d-aa55-d72a17ea6f0e",
+              "name": "taskTitle",
+              "value": "={{ $json.body.taskTitle }}",
+              "type": "string"
+            },
+            {
+              "id": "e7e4e431-87f6-4ef3-ba67-948e9a75a9ce",
+              "name": "action",
+              "value": "={{ $json.body.action}}",
+              "type": "string"
+            },
+            {
+              "id": "e1576556-2c31-4edc-b25a-9ee71fee513d",
+              "name": "notes",
+              "value": "={{ $json.body.notes }}",
+              "type": "string"
+            },
+      {
+        "id": "4202370a-b9c7-49f1-baef-8eb7cf281121",
+        "name": "runId",
+        "value": "={{ $json.body.runId }}",
+        "type": "string"
+      },
+      {
+        "id": "phase7-00-sourceRunId",
+        "name": "sourceRunId",
+        "value": "={{ $json.body.sourceRunId }}",
+        "type": "string"
+      },
+            {
+              "id": "df30dc11-fd3d-4a85-ba43-1a390949cc18",
+              "name": "decision",
+              "value": "={{ $json.body.decision }}",
+              "type": "string"
+            },
+            {
+              "id": "4d056cc8-f981-42d5-8720-80507993c0a3",
+              "name": "reviewNote",
+              "value": "={{ $json.body.reviewNote }}",
+              "type": "string"
+            },
+            {
+              "id": "phase4-01-workType",
+              "name": "workType",
+              "value": "={{ $json.body.workType }}",
+              "type": "string"
+            },
+            {
+              "id": "phase4-02-requiresVisualApproval",
+              "name": "requiresVisualApproval",
+              "value": "={{ $json.body.requiresVisualApproval }}",
+              "type": "string"
+            },
+            {
+              "id": "phase4-03-referenceImagePath",
+              "name": "referenceImagePath",
+              "value": "={{ $json.body.referenceImagePath }}",
+              "type": "string"
+            },
+            {
+              "id": "phase4-04-designNotesPath",
+              "name": "designNotesPath",
+              "value": "={{ $json.body.designNotesPath }}",
+              "type": "string"
+            },
+            {
+              "id": "phase4-05-designSource",
+              "name": "designSource",
+              "value": "={{ $json.body.designSource }}",
+              "type": "string"
+            },
+            {
+              "id": "phase7-01-revisionReason",
+              "name": "revisionReason",
+              "value": "={{ $json.body.revisionReason }}",
+              "type": "string"
+            },
+            {
+              "id": "phase7-02-reviewFeedback",
+              "name": "reviewFeedback",
+              "value": "={{ $json.body.reviewFeedback }}",
+              "type": "string"
+            },
+            {
+              "id": "phase7-03-carryForwardDesignReference",
+              "name": "carryForwardDesignReference",
+              "value": "={{ $json.body.carryForwardDesignReference }}",
+              "type": "string"
+            },
+            {
+              "id": "phase7-04-revisionSummary",
+              "name": "revisionSummary",
+              "value": "={{ $json.body.revisionSummary }}",
+              "type": "string"
+            },
+            {
+              "id": "phase7-05-revisedNotes",
+              "name": "revisedNotes",
+              "value": "={{ $json.body.revisedNotes }}",
+              "type": "string"
+            },
+            {
+              "id": "phase8-01-tailLines",
+              "name": "tailLines",
+              "value": "={{ $json.body.tailLines }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "7160db94-a565-4e10-93b6-efb0ddfbb611",
+      "name": "Normalize Input"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "start_run",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "39b4e755-c771-4bf0-8506-f64dbe5d0253"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "phase11-execute-codex",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "execute_codex",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5c56cbef-76bc-40f4-aa1e-2e59b1ee4736",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "apply_review_decision",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "35f200fc-90f5-4055-a7dd-33c6ce004c1c",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "build_codex_handoff",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "d8f7c7f6-2f7f-4d2f-9d1f-1a2b3c4d5e6f",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "execute_cursor",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "phase7-switch-create-revision-run",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create_revision_run",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "phase8-switch-get-run-live-status",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "get_run_live_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        368,
+        -16
+      ],
+      "id": "1dfdba55-a259-44f6-8dc3-3cc3479c480c",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/pathos-dev-run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  repoPath: $json.repoPath,\n  branchName: $json.branchName,\n  goal: $json.goal,\n  dayNumber: $json.dayNumber,\n  taskTitle: $json.taskTitle,\n  notes: $json.notes,\n  workType: $json.workType,\n  requiresVisualApproval: $json.requiresVisualApproval,\n  revisionOfRunId: $json.revisionOfRunId,\n  rootRunId: $json.rootRunId,\n  attemptNumber: $json.attemptNumber,\n  reviewFeedback: $json.reviewFeedback,\n  revisionReason: $json.revisionReason,\n  carryForwardDesignReference: $json.carryForwardDesignReference,\n  revisionSummary: $json.revisionSummary,\n  previousDesignSource: $json.previousDesignSource,\n  previousReferenceImagePathCopied: $json.previousReferenceImagePathCopied,\n  previousDesignNotesPathCopied: $json.previousDesignNotesPathCopied,\n  referenceImagePath: $json.referenceImagePath,\n  designNotesPath: $json.designNotesPath,\n  designSource: $json.designSource\n} }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        -176
+      ],
+      "id": "2ad6f69d-0a88-4b80-9071-3e1d31220c29",
+      "name": "Start Run Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/pathos-review-decision",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  runId: $json.runId,\n  decision: $json.decision,\n  reviewNote: $json.reviewNote\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        0
+      ],
+      "id": "3db097ef-8d54-4f6a-8ade-a30bdd79705f",
+      "name": "Review Decision Request"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  status: $json.status || \"success\",\n  action: $(\"Normalize Input\").item.json.action,\n  data: $json\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        944,
+        0
+      ],
+      "id": "5b269890-e3ba-4d9f-8174-4211459fda43",
+      "name": "Respond Orchestrator"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/pathos-codex-handoff",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  runId: $json.runId,\n  notes: $json.notes\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        192
+      ],
+      "id": "fad98e5a-d802-452a-a833-2a4cadf0be9b",
+      "name": "Codex Handof Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/pathos-cursor-execution",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  runId: $json.runId\n} }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        352
+      ],
+      "id": "c7a4d8e1-b6c5-4d8f-91e3-5f2a1b7c9d0e",
+      "name": "Execute Cursor Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ...$json } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        432
+      ],
+      "id": "phase11-build-execute-codex-command",
+      "name": "Build Execute Codex Command"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\execute-codex-stage.ps1\" -RunId \"{{$json.runId}}\" -RunsRoot \"C:\\dev\\PathOS\\n8n-lab\\runs\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        848,
+        432
+      ],
+      "id": "phase11-execute-codex-stage",
+      "name": "Execute Codex Stage"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $(\"Execute Codex Stage\").item.json;\nconst stdout = typeof raw.stdout === \"string\" ? raw.stdout.trim().replace(/^\\uFEFF/, \"\") : \"\";\nconst runId = $(\"Normalize Input\").item.json.runId;\n\nlet parsed = {\n  status: \"failure\",\n  message: \"Codex execution failed\",\n  runId,\n  reason: \"execute-codex-stage.ps1 returned an unparseable response.\",\n  stdout,\n  stderr: raw.stderr ?? \"\",\n  exitCode: String(raw.exitCode ?? \"\")\n};\n\nfor (const line of stdout.split(/\\r?\\n/)) {\n  if (!line || !line.trim().startsWith('{')) continue;\n  try {\n    parsed = JSON.parse(line.trim());\n    break;\n  } catch {}\n}\n\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        432
+      ],
+      "id": "phase11-parse-execute-codex-result",
+      "name": "Parse Execute Codex Result"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "387334d2-5d8b-4f79-9759-2a7cec8d8e9c",
+              "name": "status",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "f2ab53b9-a0a4-4e7b-bd8a-a3352d600c28",
+              "name": "action",
+              "value": "={{ $(\"Normalize Input\").item.json.action }}",
+              "type": "string"
+            },
+            {
+              "id": "6c481939-a8f4-461a-b72b-7af760e21b53",
+              "name": "message",
+              "value": "=Unsupported action",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        384
+      ],
+      "id": "d74b5a64-cd95-4cfd-9302-ef34ed0191f0",
+      "name": "Unsupported Action Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        944,
+        160
+      ],
+      "id": "c09f0376-8bda-4dee-9e8f-07225198e4b9",
+      "name": "Response Unsupported Action"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceRunId = $json.sourceRunId ?? $json.runId ?? \"\";\n\nconst revisionCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\create-revision-run.ps1\"` +\n  ` -RunId \"${sourceRunId}\"` +\n  ` -RunsRoot \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs\"` +\n  ` -RevisionReason \"${$json.revisionReason ?? \"\"}\"` +\n  ` -ReviewFeedback \"${$json.reviewFeedback ?? \"\"}\"` +\n  ` -CarryForwardDesignReference \"${$json.carryForwardDesignReference ?? \"true\"}\"` +\n  ` -RevisionSummary \"${$json.revisionSummary ?? \"\"}\"` +\n  ` -RevisedNotes \"${$json.revisedNotes ?? \"\"}\"` +\n  ` -ReferenceImagePath \"${$json.referenceImagePath ?? \"\"}\"` +\n  ` -DesignNotesPath \"${$json.designNotesPath ?? \"\"}\"` +\n  ` -DesignSource \"${$json.designSource ?? \"\"}\"`;\n\nreturn [{ json: { ...$json, sourceRunId, revisionCommand } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        512
+      ],
+      "id": "phase7-build-create-revision-command",
+      "name": "Build Create Revision Run Command"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Create Revision Run Command\").item.json.revisionCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        848,
+        512
+      ],
+      "id": "phase7-execute-create-revision-run",
+      "name": "Execute Create Revision Run"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $(\"Execute Create Revision Run\").item.json;\nconst stdout = typeof raw.stdout === \"string\" ? raw.stdout.trim().replace(/^\\uFEFF/, \"\") : \"\";\nconst sourceRunId = $(\"Normalize Input\").item.json.sourceRunId ?? $(\"Normalize Input\").item.json.runId;\n\nlet parsed = {\n  status: \"failure\",\n  message: \"Revision run creation failed\",\n  reason: \"create-revision-run.ps1 returned an unparseable response.\",\n  runId: sourceRunId,\n  sourceRunId\n};\n\ntry {\n  if (stdout) {\n    parsed = JSON.parse(stdout);\n  }\n} catch (error) {\n  parsed = {\n    status: \"failure\",\n    message: \"Revision run creation failed\",\n    reason: error.message,\n    runId: sourceRunId,\n    sourceRunId,\n    rawStdout: stdout\n  };\n}\n\nif (parsed.status === \"success\" && parsed.revisionPacket) {\n  return [{ json: { ...parsed, ...parsed.revisionPacket } }];\n}\n\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        512
+      ],
+      "id": "phase7-parse-create-revision-run",
+      "name": "Parse Create Revision Run Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "phase7-revision-packet-ready-check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1264,
+        512
+      ],
+      "id": "phase7-revision-packet-ready",
+      "name": "Revision Packet Ready?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const statusCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\get-run-live-status.ps1\"` +\n  ` -RunId \"${$json.runId}\"` +\n  ` -RunsRoot \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs\"` +\n  ` -TailLines \"${$json.tailLines ?? \"40\"}\"`;\n\nreturn [{ json: { ...$json, statusCommand } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        672
+      ],
+      "id": "phase8-build-live-status-command",
+      "name": "Build Get Run Live Status Command"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Get Run Live Status Command\").item.json.statusCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        848,
+        672
+      ],
+      "id": "phase8-execute-live-status-command",
+      "name": "Execute Get Run Live Status"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $(\"Execute Get Run Live Status\").item.json;\nconst stdout = typeof raw.stdout === \"string\" ? raw.stdout.trim().replace(/^\\uFEFF/, \"\") : \"\";\n\nif (!stdout) {\n  return [{ json: { status: \"failure\", message: \"Live status helper returned no output.\", runId: $(\"Normalize Input\").item.json.runId } }];\n}\n\ntry {\n  return [{ json: JSON.parse(stdout) }];\n} catch (error) {\n  return [{ json: { status: \"failure\", message: \"Live status helper returned invalid JSON.\", reason: error.message, rawStdout: stdout, runId: $(\"Normalize Input\").item.json.runId } }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        672
+      ],
+      "id": "phase8-parse-live-status-result",
+      "name": "Parse Get Run Live Status Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Run Request": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Start Run Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Codex Stage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Review Decision Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Codex Handof Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Cursor Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Create Revision Run Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Get Run Live Status Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unsupported Action Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Decision Request": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Handof Request": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Cursor Request": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Execute Codex Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Codex Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Codex Stage": {
+      "main": [
+        [
+          {
+            "node": "Parse Execute Codex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Execute Codex Result": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unsupported Action Response": {
+      "main": [
+        [
+          {
+            "node": "Response Unsupported Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Create Revision Run Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Create Revision Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Create Revision Run": {
+      "main": [
+        [
+          {
+            "node": "Parse Create Revision Run Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Create Revision Run Result": {
+      "main": [
+        [
+          {
+            "node": "Revision Packet Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revision Packet Ready?": {
+      "main": [
+        [
+          {
+            "node": "Start Run Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Get Run Live Status Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Get Run Live Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Get Run Live Status": {
+      "main": [
+        [
+          {
+            "node": "Parse Get Run Live Status Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Get Run Live Status Result": {
+      "main": [
+        [
+          {
+            "node": "Respond Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "dbf5aba8-e034-4188-ab32-9923b486d188",
+  "meta": {
+    "instanceId": "9ea7968f10c04e77807172205598f527a4da78f10b07762341342d9475e38936"
+  },
+  "id": "QkaeR0TW5Sc09ad0",
+  "tags": []
+}

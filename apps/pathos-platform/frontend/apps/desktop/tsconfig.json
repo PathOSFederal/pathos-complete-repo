@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "paths": {
+      "@pathos/core": ["../../packages/core/src/index.ts"],
+      "@pathos/core/*": ["../../packages/core/src/*"],
+      "@pathos/adapters": ["../../packages/adapters/src/index.ts"],
+      "@pathos/adapters/*": ["../../packages/adapters/src/*"],
+      "@pathos/ui": ["../../packages/ui/src/index.ts"],
+      "@pathos/ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["electron/**"]
+}

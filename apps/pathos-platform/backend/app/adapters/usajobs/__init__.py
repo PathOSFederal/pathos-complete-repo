@@ -1,0 +1,1 @@
+"""USAJOBS integration adapter package."""

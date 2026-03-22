@@ -1,0 +1,31 @@
+{
+  "profile": {
+    "user_id": "user-apply",
+    "years_experience": 6,
+    "target_roles": ["Backend Engineer"],
+    "skills": ["Python", "FastAPI", "SQL", "API", "AWS"],
+    "preferred_locations": ["Remote", "New York, NY"],
+    "authorized_to_work": true
+  },
+  "job": {
+    "job_id": "job-apply",
+    "title": "Senior Backend Engineer",
+    "company": "Acme",
+    "location": {
+      "city": "New York",
+      "region": "NY",
+      "country": "US",
+      "remote": true
+    },
+    "grade_range": {
+      "min_grade": 5,
+      "max_grade": 7
+    },
+    "posting_dates": {
+      "posted_date": "2026-02-01",
+      "closes_date": "2026-03-01"
+    },
+    "source_url": "https://example.com/jobs/job-apply"
+  },
+  "user_notes": "Looking for distributed backend teams."
+}

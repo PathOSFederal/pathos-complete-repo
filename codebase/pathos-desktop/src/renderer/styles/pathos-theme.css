@@ -1,0 +1,43 @@
+:root {
+  color-scheme: dark;
+  --radius-1: 8px;
+  --radius-2: 16px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --shadow-1: 0 18px 40px color-mix(in oklch, var(--background) 35%, black);
+}
+
+.pathos-theme {
+  --bg-app: var(--background);
+  --bg-sidebar: var(--sidebar);
+  --bg-surface: var(--card);
+  --bg-surface-2: color-mix(in oklch, var(--card) 88%, var(--sidebar));
+  --bg-rail: var(--bg-sidebar);
+  --bg-panel: var(--bg-surface);
+  --bg-card: var(--bg-surface-2);
+  --border-strong: color-mix(in oklch, var(--border) 70%, black);
+  --text: var(--foreground);
+  --text-muted: var(--muted-foreground);
+  --text-dim: color-mix(
+    in oklch,
+    var(--muted-foreground) 65%,
+    var(--background)
+  );
+  --accent-hover: color-mix(in oklch, var(--accent) 85%, white);
+  --accent-soft: color-mix(in oklch, var(--accent) 18%, var(--card));
+  --rail-gradient: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--sidebar) 92%, var(--sidebar-accent)) 0%,
+    var(--sidebar) 55%,
+    color-mix(in oklch, var(--sidebar) 88%, black) 100%
+  );
+  --focus: 0 0 0 3px color-mix(in oklch, var(--ring) 45%, transparent);
+  background: var(--bg-app);
+  color: var(--text);
+}
+
+.pathos-theme * {
+  box-sizing: border-box;
+}

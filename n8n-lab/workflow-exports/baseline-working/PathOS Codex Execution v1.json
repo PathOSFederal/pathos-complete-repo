@@ -1,0 +1,778 @@
+{
+  "name": "PathOS Codex Execution v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pathos-codex-execution",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4cced987-2d4e-45e3-9024-74ad3390c8d8",
+      "name": "Webhook",
+      "webhookId": "8daab39b-4295-4bd1-bb2a-d48fefea7476"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst runsRoot = body.runsRoot ?? 'C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs';\nconst runId = body.runId ?? '';\n\nreturn [{\n  json: {\n    runId,\n    runsRoot,\n    runPath: body.runPath ?? `${runsRoot}\\\\${runId}`,\n    requestedAt: $now,\n    workflowName: 'PathOS Codex Execution v1'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "26175b74-0ee0-4278-9f1f-3140364bb13c",
+      "name": "Normalize Packet"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst runPath = $json.runPath;\nconst statusPath = `${runPath}\\\\status.json`;\n\nif (!fs.existsSync(statusPath)) {\n  throw new Error(`status.json not found: ${statusPath}`);\n}\n\nconst status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));\n\nreturn [{\n  json: {\n    ...$json,\n    statusPath,\n    repoPath: status.repoPath,\n    currentStatus: status\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        0
+      ],
+      "id": "d02079d4-e871-44c6-85fe-f772f03d3669",
+      "name": "Read Current Status"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.currentStatus.runStatus }}",
+                    "rightValue": "ready_for_codex",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "valid-ready-for-codex"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.currentStatus.runStatus }}",
+                    "rightValue": "codex_handoff_built",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "valid-handoff-built"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.currentStatus.runStatus }}",
+                    "rightValue": "codex_review_complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "already-complete"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        656,
+        0
+      ],
+      "id": "9766284d-6656-479a-8082-7537f6c289e2",
+      "name": "Validate Legal Start State"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/pathos-codex-handoff",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { runId: $json.runId, runsRoot: $json.runsRoot } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        -160
+      ],
+      "id": "04686a3a-cd94-444f-b8c4-a1eaf5c7236a",
+      "name": "Execute Handoff Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "handoff-succeeded"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1104,
+        -160
+      ],
+      "id": "bc2e40b1-f2d6-4f4b-b4a9-4b79db1e1c2f",
+      "name": "Handoff Succeeded?"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{$('Read Current Status').item.json.runId}}\" -RunsRoot \"{{$('Read Current Status').item.json.runsRoot}}\" -NewStatus \"codex_in_progress\" -ReviewStatus \"approved\" -StatusNote \"Codex execution started by PathOS Codex Execution v1.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        -32
+      ],
+      "id": "d34d4863-85ff-4d1c-bdf6-183c35a1a239",
+      "name": "Mark Codex In Progress",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\invoke-codex.ps1\" -RunId \"{{$('Read Current Status').item.json.runId}}\" -RunPath \"{{$('Read Current Status').item.json.runPath}}\" -RepoPath \"{{$('Read Current Status').item.json.repoPath}}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1552,
+        -32
+      ],
+      "id": "4a38f253-e1da-41cd-9b90-2d67f40d2c9d",
+      "name": "Execute Codex",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Execute Codex').item.json;\nconst stdout = typeof raw.stdout === 'string' ? raw.stdout.trim().replace(/^\\uFEFF/, '') : '';\nconst stderr = typeof raw.stderr === 'string' ? raw.stderr : '';\nconst runId = $('Normalize Packet').item.json.runId;\n\nlet parsed = null;\nfor (const line of stdout.split(/\\r?\\n/)) {\n  if (!line || !line.trim().startsWith('{')) continue;\n  try {\n    parsed = JSON.parse(line.trim());\n    break;\n  } catch {}\n}\n\nconst codexCompleted = stdout.includes(`CODEX_COMPLETED::${runId}`) && Number(raw.exitCode ?? 0) === 0;\nconst codexFailed = stdout.includes(`CODEX_FAILED::${runId}`) || Number(raw.exitCode ?? 0) !== 0;\n\nreturn [{\n  json: {\n    ...$('Read Current Status').item.json,\n    status: codexCompleted ? 'success' : 'failure',\n    message: parsed?.message ?? (codexCompleted ? 'Codex execution succeeded' : 'Codex execution failed'),\n    runId,\n    nextStatus: codexCompleted ? 'codex_review_complete' : 'codex_failed',\n    stdout,\n    stderr,\n    exitCode: String(raw.exitCode ?? ''),\n    execution: parsed,\n    codexCompleted,\n    codexFailed\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        -32
+      ],
+      "id": "a56af280-9d5e-4a06-bad2-1d6e3f1fbc86",
+      "name": "Parse Codex Output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.codexCompleted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "id": "codex-completed"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        -32
+      ],
+      "id": "ad3541c6-a8cd-46d1-ab70-c2985c68991c",
+      "name": "Codex Success?"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{$json.runId}}\" -RunsRoot \"{{$json.runsRoot}}\" -NewStatus \"codex_review_complete\" -ReviewStatus \"approved\" -StatusNote \"Codex execution completed and ready for follow-up review.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2224,
+        -128
+      ],
+      "id": "4c9dfd8b-87c8-48c4-b02b-b4dfd07dbb98",
+      "name": "Update Success Status",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{$json.runId}}\" -RunsRoot \"{{$json.runsRoot}}\" -NewStatus \"codex_failed\" -ReviewStatus \"approved\" -StatusNote \"Codex execution failed.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2224,
+        64
+      ],
+      "id": "d7c7206f-8f0a-4e90-b605-e017496a0a89",
+      "name": "Update Failure Status",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success-status",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "success-message",
+              "name": "message",
+              "value": "Codex execution succeeded",
+              "type": "string"
+            },
+            {
+              "id": "success-run-id",
+              "name": "runId",
+              "value": "={{ $('Parse Codex Output').item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "success-next-status",
+              "name": "nextStatus",
+              "value": "codex_review_complete",
+              "type": "string"
+            },
+            {
+              "id": "success-execution",
+              "name": "execution",
+              "value": "={{ $('Parse Codex Output').item.json.execution }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2448,
+        -128
+      ],
+      "id": "cb62ff0e-1b0f-428e-b75e-593403be2e12",
+      "name": "Success Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "failure-status",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "failure-message",
+              "name": "message",
+              "value": "={{ $('Parse Codex Output').item.json.message || 'Codex execution failed' }}",
+              "type": "string"
+            },
+            {
+              "id": "failure-run-id",
+              "name": "runId",
+              "value": "={{ $('Parse Codex Output').item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "failure-next-status",
+              "name": "nextStatus",
+              "value": "codex_failed",
+              "type": "string"
+            },
+            {
+              "id": "failure-stdout",
+              "name": "stdout",
+              "value": "={{ $('Parse Codex Output').item.json.stdout }}",
+              "type": "string"
+            },
+            {
+              "id": "failure-stderr",
+              "name": "stderr",
+              "value": "={{ $('Parse Codex Output').item.json.stderr }}",
+              "type": "string"
+            },
+            {
+              "id": "failure-exit",
+              "name": "exitCode",
+              "value": "={{ $('Parse Codex Output').item.json.exitCode }}",
+              "type": "string"
+            },
+            {
+              "id": "failure-execution",
+              "name": "execution",
+              "value": "={{ $('Parse Codex Output').item.json.execution }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2448,
+        64
+      ],
+      "id": "0de6de2a-a3c7-44d8-a603-0879fbc3f5f1",
+      "name": "Failure Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "handoff-fail-status",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "handoff-fail-message",
+              "name": "message",
+              "value": "Codex handoff could not be built before execution",
+              "type": "string"
+            },
+            {
+              "id": "handoff-fail-run-id",
+              "name": "runId",
+              "value": "={{ $('Read Current Status').item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "handoff-fail-raw",
+              "name": "handoffResponse",
+              "value": "={{ $('Execute Handoff Request').item.json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1328,
+        -272
+      ],
+      "id": "2ff4efda-7e5f-48a0-befb-3964b05774a3",
+      "name": "Handoff Failure Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "already-status",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "already-message",
+              "name": "message",
+              "value": "Codex execution already completed for this run",
+              "type": "string"
+            },
+            {
+              "id": "already-run-id",
+              "name": "runId",
+              "value": "={{ $('Read Current Status').item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "already-next-status",
+              "name": "nextStatus",
+              "value": "codex_review_complete",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        128
+      ],
+      "id": "ef866722-2dae-48ce-a58b-95459bf92dfd",
+      "name": "Already Complete Response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "illegal-status",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "illegal-message",
+              "name": "message",
+              "value": "Illegal run state for Codex execution",
+              "type": "string"
+            },
+            {
+              "id": "illegal-run-id",
+              "name": "runId",
+              "value": "={{ $('Read Current Status').item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "illegal-current-status",
+              "name": "currentStatus",
+              "value": "={{ $('Read Current Status').item.json.currentStatus.runStatus }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        288
+      ],
+      "id": "a9a65fb2-10ee-4fe0-880d-9854bd2f54ac",
+      "name": "Illegal State Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2672,
+        0
+      ],
+      "id": "c1d40b45-3a05-4af3-ac0b-26f6fb559f6a",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Packet": {
+      "main": [
+        [
+          {
+            "node": "Read Current Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Current Status": {
+      "main": [
+        [
+          {
+            "node": "Validate Legal Start State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Legal Start State": {
+      "main": [
+        [
+          {
+            "node": "Execute Handoff Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Codex In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Already Complete Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Illegal State Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Handoff Request": {
+      "main": [
+        [
+          {
+            "node": "Handoff Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Mark Codex In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handoff Failure Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Codex In Progress": {
+      "main": [
+        [
+          {
+            "node": "Execute Codex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Codex": {
+      "main": [
+        [
+          {
+            "node": "Parse Codex Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Codex Output": {
+      "main": [
+        [
+          {
+            "node": "Codex Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Success?": {
+      "main": [
+        [
+          {
+            "node": "Update Success Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Failure Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Success Status": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Failure Status": {
+      "main": [
+        [
+          {
+            "node": "Failure Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failure Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff Failure Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Complete Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Illegal State Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "748f2ccc-cfa1-45f7-94a4-d5da154fe415",
+  "meta": {
+    "instanceId": "9ea7968f10c04e77807172205598f527a4da78f10b07762341342d9475e38936"
+  },
+  "id": "bCo6S5mM8h2QdXxK",
+  "tags": []
+}

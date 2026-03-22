@@ -1,0 +1,629 @@
+{
+  "name": "Webhook Dev Run v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pathos-dev-run",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e194f976-8031-4517-8c08-7719a163c54f",
+      "name": "Webhook",
+      "webhookId": "fd56a8a5-845f-4000-aa68-d5a01a75f87b"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Commands\").item.json.prepareCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "f9a527bc-6d5a-4270-82b9-f3af36d63748",
+      "name": "Execute Command",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst runId = `run-${now.getTime()}`;\nconst effectiveRootRunId = $json.rootRunId ? $json.rootRunId : runId;\nconst effectiveAttemptNumber = $json.attemptNumber ? $json.attemptNumber : ($json.revisionOfRunId ? \"2\" : \"1\");\nconst effectiveCarryForwardDesignReference = $json.carryForwardDesignReference ? $json.carryForwardDesignReference : ($json.revisionOfRunId ? \"true\" : \"false\");\n\nconst prepareCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\prepare-run.ps1\"` +\n  ` -RunId \"${runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -RepoPath \"${$json.repoPath}\"` +\n  ` -BranchName \"${$json.branchName}\"` +\n  ` -Goal \"${$json.goal}\"` +\n  ` -DayNumber \"${$json.dayNumber}\"` +\n  ` -TaskTitle \"${$json.taskTitle}\"` +\n  ` -Notes \"${$json.notes}\"` +\n  ` -WorkType \"${$json.workType}\"` +\n  ` -RequiresVisualApproval \"${$json.requiresVisualApproval}\"` +\n  ` -AllowCursorHandoff \"${$json.allowCursorHandoff}\"` +\n  ` -AllowCodexHandoff \"${$json.allowCodexHandoff}\"` +\n  ` -AllowFinalReview \"${$json.allowFinalReview}\"` +\n  ` -ReviewStatus \"${$json.reviewStatus}\"` +\n  ` -RevisionOfRunId \"${$json.revisionOfRunId ?? \"\"}\"` +\n  ` -RootRunId \"${effectiveRootRunId}\"` +\n  ` -AttemptNumber \"${effectiveAttemptNumber}\"` +\n  ` -ReviewFeedback \"${$json.reviewFeedback ?? \"\"}\"` +\n  ` -RevisionReason \"${$json.revisionReason ?? \"\"}\"` +\n  ` -CarryForwardDesignReference \"${effectiveCarryForwardDesignReference}\"` +\n  ` -RevisionSummary \"${$json.revisionSummary ?? \"\"}\"` +\n  ` -PreviousDesignSource \"${$json.previousDesignSource ?? \"\"}\"` +\n  ` -PreviousReferenceImagePathCopied \"${$json.previousReferenceImagePathCopied ?? \"\"}\"` +\n  ` -PreviousDesignNotesPathCopied \"${$json.previousDesignNotesPathCopied ?? \"\"}\"` +\n  ` -ReferenceImagePath \"${$json.referenceImagePath ?? \"\"}\"` +\n  ` -DesignNotesPath \"${$json.designNotesPath ?? \"\"}\"` +\n  ` -DesignSource \"${$json.designSource ?? \"\"}\"` +\n  ` -ForceTargetedModification \"${$json.forceTargetedModification ?? \"false\"}\"` +\n  ` -AllowedTargetFiles \"${Array.isArray($json.allowedTargetFiles) ? $json.allowedTargetFiles.join(\"|\") : ($json.allowedTargetFiles ?? \"\")}\"` +\n  ` -NoOpOnTargetFilesIsFailure \"${$json.noOpOnTargetFilesIsFailure ?? \"false\"}\"`;\n\nconst repoStateCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\collect-repo-state.ps1\"` +\n  ` -RunId \"${runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -RepoPath \"${$json.repoPath}\"`;\n\nconst preflightCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\preflight-git.ps1\"` +\n  ` -RunId \"${runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -RepoPath \"${$json.repoPath}\"` +\n  ` -BranchName \"${$json.branchName}\"` +\n  ` -AllowBranchCreate \"${$json.allowBranchCreate}\"`;\n\nconst runIndexCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\update-run-index.ps1\"` +\n  ` -RunId \"${runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -RepoPath \"${$json.repoPath}\"` +\n  ` -BranchName \"${$json.branchName}\"` +\n  ` -Goal \"${$json.goal}\"` +\n  ` -RunStatus \"prepared\"` +\n  ` -RevisionOfRunId \"${$json.revisionOfRunId ?? \"\"}\"` +\n  ` -RootRunId \"${effectiveRootRunId}\"` +\n  ` -AttemptNumber \"${effectiveAttemptNumber}\"` +\n  ` -RevisionReason \"${$json.revisionReason ?? \"\"}\"`;\n\nconst promptBuildCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\build-prompts.ps1\"` +\n  ` -RunId \"${runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -RepoPath \"${$json.repoPath}\"` +\n  ` -BranchName \"${$json.branchName}\"` +\n  ` -Goal \"${$json.goal}\"` +\n  ` -DayNumber \"${$json.dayNumber}\"` +\n  ` -TaskTitle \"${$json.taskTitle}\"` +\n  ` -Notes \"${$json.notes}\"` +\n  ` -WorkType \"${$json.workType}\"` +\n  ` -RequiresVisualApproval \"${$json.requiresVisualApproval}\"` +\n  ` -AllowCursorHandoff \"${$json.allowCursorHandoff}\"` +\n  ` -AllowCodexHandoff \"${$json.allowCodexHandoff}\"` +\n  ` -AllowFinalReview \"${$json.allowFinalReview}\"` +\n  ` -ReviewStatus \"${$json.reviewStatus}\"` +\n  ` -RevisionOfRunId \"${$json.revisionOfRunId ?? \"\"}\"`;\n\nconst statusUpdatePreparedCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\update-run-status.ps1\"` +\n  ` -RunId \"${runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -NewStatus \"ready_for_cursor\"` +\n  ` -ReviewStatus \"${$json.reviewStatus}\"` +\n  ` -StatusNote \"Run prepared and prompts built\"`;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      runId,\n      prepareCommand,\n      repoStateCommand,\n      preflightCommand,\n      runIndexCommand,\n      promptBuildCommand,\n      statusUpdatePreparedCommand\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "41ede023-3e6f-410b-8507-cb382ddbcec2",
+      "name": "Build Commands"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Commands\").item.json.repoStateCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "7bb5e4ee-b469-4a97-a4a7-4a9ce7832c2c",
+      "name": "Execute Command1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "15da944e-cea1-46cd-bdf0-509ba1bf1aef",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1872,
+        0
+      ],
+      "id": "97d3691a-ba25-4728-ac2b-2af1d1f56627",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a53951cd-d079-4953-92b6-1d6754256dd9",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "05fda77a-8be3-4379-80ef-1b91f3042986",
+              "name": "message",
+              "value": "Run created and repo state captured",
+              "type": "string"
+            },
+            {
+              "id": "1f76bef9-b7ac-4ea8-8b24-7d110cab8211",
+              "name": "runId",
+              "value": "={{ $(\"Build Commands\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "568cd3ad-37fd-44fb-a0e7-62622409836b",
+              "name": "repoPath",
+              "value": "={{ $(\"Build Commands\").item.json.repoPath }}",
+              "type": "string"
+            },
+            {
+              "id": "b7467053-b6bc-4f20-a381-531757e4ab18",
+              "name": "runPath",
+              "value": "={{ $(\"Build Commands\").item.json.runsRoot + \"\\\\\" + $(\"Build Commands\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "d42a041b-6c02-41ce-bfda-1219e7521e58",
+              "name": "prepareExitCode",
+              "value": "={{ $(\"Execute Command\").item.json.exitCode }}",
+              "type": "string"
+            },
+            {
+              "id": "7cd49efe-57c2-4401-a717-56e4753bf77a",
+              "name": "repoStateExitCode",
+              "value": "={{ $(\"Execute Command\").item.json.exitCode }}",
+              "type": "string"
+            },
+            {
+              "id": "128d6b7f-8b1c-4eee-8108-8a8a41a4eba7",
+              "name": "allowBranchCreate",
+              "value": "={{ $(\"Normalize Packet\").item.json.allowBranchCreate }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2080,
+        -96
+      ],
+      "id": "158c795e-3676-4657-94b2-526c352354bd",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "65deca11-1b45-4030-944e-72eaff66f1a4",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "49c99cb3-dbb5-45e2-ab99-82a4520d0c00",
+              "name": "message",
+              "value": "Repo state capture failed",
+              "type": "string"
+            },
+            {
+              "id": "186a1027-4fe9-4ef4-99d0-dc10f23aab57",
+              "name": "runId",
+              "value": "={{ $(\"Build Commands\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "178dbc3d-af72-4ae6-b068-8575dd63ecfb",
+              "name": "repoPath",
+              "value": "={{ $(\"Build Commands\").item.json.repoPath }}",
+              "type": "string"
+            },
+            {
+              "id": "9145f58a-998f-4cee-963d-01290144e74d",
+              "name": "prepareExitCode",
+              "value": "={{ $(\"Execute Command\").item.json.exitCode }}",
+              "type": "string"
+            },
+            {
+              "id": "4c95fc89-d549-4efb-9ee6-df773384107c",
+              "name": "repoStateExitCode",
+              "value": "={{ $(\"Execute Command1\").item.json.exitCode }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2080,
+        96
+      ],
+      "id": "a7fb4181-f192-4111-81e6-272057e50471",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2496,
+        -96
+      ],
+      "id": "fc0856c3-080c-4808-aa33-87175ff32500",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Commands\").item.json.preflightCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "bb519076-6d23-4a1c-be23-41d1037ed063",
+      "name": "Execute Command2"
+    },
+    {
+      "parameters": {
+        "command": "=={{ $(\"Build Commands\").item.json.runIndexCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "3bf12f4f-8060-4a74-8f48-591730e40341",
+      "name": "Execute Command3"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Commands\").item.json.promptBuildCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "e7096b40-e938-450e-ad92-cc61f5ec025d",
+      "name": "Execute Command4"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Commands\").item.json.statusUpdatePreparedCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        0
+      ],
+      "id": "4387909c-de0a-4b4d-9e55-1a3c53654315",
+      "name": "Execute Command5"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4fd71e38-2442-48b4-8cc4-20db654a43e4",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "4852a31d-1a49-40e7-8ec1-583d72e8f31d",
+              "name": "message",
+              "value": "Run created and repo state captured",
+              "type": "string"
+            },
+            {
+              "id": "4c839008-15a1-4498-912c-d4dc919d62d5",
+              "name": "runId",
+              "value": "={{ $(\"Build Commands\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "d1b26a9b-7af9-40bf-8d0a-577a11a88fa3",
+              "name": "repoPath",
+              "value": "={{ $(\"Build Commands\").item.json.repoPath }}",
+              "type": "string"
+            },
+            {
+              "id": "94a0d8d5-3054-40f5-ac03-420ae8b79cc8",
+              "name": "runPath",
+              "value": "={{ $(\"Build Commands\").item.json.runsRoot + \"\\\\\" + $(\"Build Commands\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "22326983-9dcf-4088-8281-f983d784abeb",
+              "name": "prepareExitCode",
+              "value": "={{ $(\"Execute Command\").item.json.exitCode }}",
+              "type": "string"
+            },
+            {
+              "id": "13d0eac8-83d9-42b9-9957-16ecfe2c914d",
+              "name": "repoStateExitCode",
+              "value": "={{ $(\"Execute Command1\").item.json.exitCode }}",
+              "type": "string"
+            },
+            {
+              "id": "e1d04be8-1a48-44d2-a372-79f10c998644",
+              "name": "allowBranchCreate",
+              "value": "={{ $(\"Normalize Packet\").item.json.allowBranchCreate }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2288,
+        -96
+      ],
+      "id": "743f61b7-852c-4b47-88ed-cd0f0e9020e4",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst normalized = {\n  project: body.project ?? \"pathos-frontend\",\n  workspaceRoot: body.workspaceRoot ?? \"C:\\\\dev\\\\PathOS\",\n  platformRoot: body.platformRoot ?? \"C:\\\\dev\\\\PathOS\\\\apps\\\\pathos-platform\",\n  repoPath: body.repoPath ?? \"C:\\\\dev\\\\PathOS\\\\apps\\\\pathos-platform\\\\frontend\",\n  n8nLabRoot: body.n8nLabRoot ?? \"C:\\\\dev\\\\PathOS\\\\n8n-lab\",\n  runsRoot: body.runsRoot ?? \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs\",\n  scriptsRoot: body.scriptsRoot ?? \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\",\n  branchName: body.branchName ?? \"feature/day-75-n8n-dev-pipeline-v1\",\n  goal: body.goal ?? \"Test n8n automated dev pipeline\",\n  dayNumber: body.dayNumber ?? 75,\n  taskTitle: body.taskTitle ?? \"Bootstrap n8n-only PathOS frontend dev run\",\n  notes: body.notes ?? \"This is an n8n-only automation experiment.\",\n  acceptanceCriteria: Array.isArray(body.acceptanceCriteria) ? body.acceptanceCriteria : [],\n  docsToRead: Array.isArray(body.docsToRead) ? body.docsToRead : [],\n  allowBranchCreate: body.allowBranchCreate ?? false,\n  runStatus: body.runStatus ?? \"initialized\",\n\n  workType: body.workType ?? \"ui\",\n  requiresVisualApproval: body.requiresVisualApproval ?? true,\n  allowPromptGeneration: body.allowPromptGeneration ?? true,\n  allowCursorHandoff: body.allowCursorHandoff ?? true,\n  allowCodexHandoff: body.allowCodexHandoff ?? false,\n  allowFinalReview: body.allowFinalReview ?? false,\n  reviewStatus: body.reviewStatus ?? \"pending\",\n  revisionOfRunId: body.revisionOfRunId ?? null,\n  rootRunId: body.rootRunId ?? \"\",\n  attemptNumber: body.attemptNumber ?? \"\",\n  reviewFeedback: body.reviewFeedback ?? \"\",\n  revisionReason: body.revisionReason ?? \"\",\n  carryForwardDesignReference: body.carryForwardDesignReference ?? \"false\",\n  revisionSummary: body.revisionSummary ?? \"\",\n  previousDesignSource: body.previousDesignSource ?? \"\",\n  previousReferenceImagePathCopied: body.previousReferenceImagePathCopied ?? \"\",\n  previousDesignNotesPathCopied: body.previousDesignNotesPathCopied ?? \"\",\n  referenceImagePath: body.referenceImagePath ?? \"\",\n  designNotesPath: body.designNotesPath ?? \"\",\n  designSource: body.designSource ?? \"\",\n  forceTargetedModification: body.forceTargetedModification ?? \"false\",\n  allowedTargetFiles: Array.isArray(body.allowedTargetFiles) ? body.allowedTargetFiles : (body.allowedTargetFiles ? [body.allowedTargetFiles] : []),\n  noOpOnTargetFilesIsFailure: body.noOpOnTargetFilesIsFailure ?? \"false\",\n};\n\nreturn [{ json: normalized }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "5fae06e2-dd2d-4219-816f-535dbaf6b19b",
+      "name": "Normalize Packet"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2304,
+        96
+      ],
+      "id": "3552c829-cc31-4e02-8b22-902d83c35850",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "phase5-prepare-run-success-check",
+              "leftValue": "={{ !!$json.error }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "phase5-prepare-run-succeeded-node",
+      "name": "Prepare Run Succeeded?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $(\"Execute Command\").item.json;\nconst normalized = $(\"Normalize Packet\").item.json;\nconst build = $(\"Build Commands\").item.json;\n\nconst errorText = typeof raw.error === \"string\" ? raw.error : \"\";\nconst errorLines = errorText.split(/\\r?\\n/).map((line) => line.trim()).filter((line) => line.length > 0);\n\nlet reason = \"Prepare run failed\";\nfor (const line of errorLines) {\n  const lower = line.toLowerCase();\n  const isNoise = lower.startsWith(\"command failed:\") || lower.startsWith(\"at \") || lower.startsWith(\"+ \") || lower.startsWith(\"categoryinfo\") || lower.startsWith(\"fullyqualifiederrorid\");\n  if (!isNoise) {\n    reason = line;\n    break;\n  }\n}\n\nconst runPath = build.runsRoot + \"\\\\\" + build.runId;\n\nreturn [{\n  json: {\n    status: \"failure\",\n    message: \"Run preparation failed\",\n    reason,\n    runId: build.runId,\n    runPath,\n    referenceImagePath: normalized.referenceImagePath || \"\",\n    designNotesPath: normalized.designNotesPath || \"\",\n    designSource: normalized.designSource || \"\",\n    failureStage: \"prepare_run\",\n    rawError: errorText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        128
+      ],
+      "id": "phase5-build-prepare-run-failure",
+      "name": "Build Prepare Run Failure Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1264,
+        128
+      ],
+      "id": "phase5-respond-prepare-run-failure",
+      "name": "Respond Prepare Run Failure"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Commands": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Prepare Run Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command1": {
+      "main": [
+        [
+          {
+            "node": "Execute Command2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command2": {
+      "main": [
+        [
+          {
+            "node": "Execute Command3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command3": {
+      "main": [
+        [
+          {
+            "node": "Execute Command4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command4": {
+      "main": [
+        [
+          {
+            "node": "Execute Command5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command5": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Packet": {
+      "main": [
+        [
+          {
+            "node": "Build Commands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Run Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Execute Command1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Prepare Run Failure Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prepare Run Failure Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Prepare Run Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "bdedbb48-7448-48c0-86ba-907c75495847",
+  "meta": {
+    "instanceId": "9ea7968f10c04e77807172205598f527a4da78f10b07762341342d9475e38936"
+  },
+  "id": "GuVjn51Hhf3WDtFh",
+  "tags": []
+}

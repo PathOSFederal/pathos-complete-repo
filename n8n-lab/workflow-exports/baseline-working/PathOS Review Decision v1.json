@@ -1,0 +1,315 @@
+{
+  "name": "PathOS Review Decision v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pathos-review-decision",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "60620af5-5d49-4e0f-a25e-42e26504bf84",
+      "name": "Webhook",
+      "webhookId": "6208bb20-c277-4161-b01e-d721b8a3cb99"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst normalized = {\n  runId: body.runId ?? \"\",\n  runsRoot: body.runsRoot ?? \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs\",\n  decision: body.decision ?? \"\",\n  reviewNote: body.reviewNote ?? \"\",\n};\n\nreturn [{ json: normalized }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "59b77fe9-76bc-4620-bdcc-b416052078b2",
+      "name": "Normalize Review Packet"
+    },
+    {
+      "parameters": {
+        "jsCode": "const reviewDecisionCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\apply-review-decision.ps1\"` +\n  ` -RunId \"${$json.runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -Decision \"${$json.decision}\"` +\n  ` -ReviewNote \"${$json.reviewNote}\"`;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      reviewDecisionCommand\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "453dcee2-20df-463d-8df8-5d0e1e60311c",
+      "name": "Build Review Command"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Review Command\").item.json.reviewDecisionCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "e0d175d7-01bc-452f-92f1-7aa55d37d11b",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e05f163b-4c38-481c-b336-cbd0a20eaaa3",
+              "leftValue": "={{$json.exitCode}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        832,
+        0
+      ],
+      "id": "7059e819-9897-4c63-b8de-5b478dff2a26",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "91210488-f729-47a9-a55a-725e3e8a2b2e",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "ce070e1b-e972-4c75-bf08-872af6cb2c20",
+              "name": "message",
+              "value": "Review decision applied",
+              "type": "string"
+            },
+            {
+              "id": "0c63579c-6c30-41b4-8ca5-5356fd8770b9",
+              "name": "runId",
+              "value": "={{ $(\"Normalize Review Packet\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "d19cb67c-238b-4b67-9add-76630355fecc",
+              "name": "decision",
+              "value": "={{ $(\"Normalize Review Packet\").item.json.decision }}",
+              "type": "string"
+            },
+            {
+              "id": "006458c7-61f9-4a91-949a-08720a1739ef",
+              "name": "reviewNote",
+              "value": "={{ $(\"Normalize Review Packet\").item.json.reviewNote }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        -96
+      ],
+      "id": "3bdbd5b8-50fe-4b17-86ae-d54e3826ddd5",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a3a748f-9101-47b2-adb9-1dfef51a047b",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "1675a8c7-1d52-4e63-9e42-cb25d4a9c46c",
+              "name": "message",
+              "value": "Failed to apply review decision",
+              "type": "string"
+            },
+            {
+              "id": "7fd4cc11-410e-45f5-b221-1d442e160be5",
+              "name": "runId",
+              "value": "={{ $(\"Normalize Review Packet\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "c93ac7d5-69d3-489b-bb1c-e5cd2fc8878f",
+              "name": "decision",
+              "value": "={{ $(\"Normalize Review Packet\").item.json.decision }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        96
+      ],
+      "id": "0081e09d-cd09-4495-a90c-7857fb3df0e7",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1248,
+        96
+      ],
+      "id": "8ca9b478-1f8d-4dea-b7b1-9818ad96aa32",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1248,
+        -96
+      ],
+      "id": "d353bbc6-3d24-4685-99f4-8f7551dfd125",
+      "name": "Respond to Webhook2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Review Packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Review Packet": {
+      "main": [
+        [
+          {
+            "node": "Build Review Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook2": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4e00530e-eeec-4b5e-81fc-88036b491e36",
+  "meta": {
+    "instanceId": "9ea7968f10c04e77807172205598f527a4da78f10b07762341342d9475e38936"
+  },
+  "id": "1B8hRvzs3EmeWuVb",
+  "tags": []
+}

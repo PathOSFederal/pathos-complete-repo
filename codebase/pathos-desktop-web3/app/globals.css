@@ -1,0 +1,304 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Light mode variables (default) */
+:root {
+  /* Light mode - clean professional look */
+  --background: oklch(0.98 0 0);
+  --foreground: oklch(0.15 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+  --primary: oklch(0.35 0.08 264.5);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.45 0.05 90);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.92 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: oklch(0.65 0.18 55);
+  --accent-foreground: oklch(0.15 0 0);
+  --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.65 0.18 55);
+  --chart-1: oklch(0.65 0.18 55);
+  --chart-2: oklch(0.45 0.08 264.5);
+  --chart-3: oklch(0.45 0.05 90);
+  --chart-4: oklch(0.55 0.06 200);
+  --chart-5: oklch(0.5 0.04 30);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.96 0 0);
+  --sidebar-foreground: oklch(0.15 0 0);
+  --sidebar-primary: oklch(0.65 0.18 55);
+  --sidebar-primary-foreground: oklch(0.15 0 0);
+  --sidebar-accent: oklch(0.35 0.08 264.5);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.88 0 0);
+  --sidebar-ring: oklch(0.65 0.18 55);
+}
+
+/* Dark mode variables */
+.dark {
+  --background: oklch(0.08 0 0);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.12 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+  --primary: oklch(0.25 0.08 264.5);
+  --primary-foreground: oklch(0.95 0 0);
+  --secondary: oklch(0.35 0.05 90);
+  --secondary-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.25 0 0);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.72 0.15 60);
+  --accent-foreground: oklch(0.08 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.18 0 0);
+  --input: oklch(0.15 0 0);
+  --ring: oklch(0.72 0.15 60);
+  --chart-1: oklch(0.72 0.15 60);
+  --chart-2: oklch(0.45 0.08 264.5);
+  --chart-3: oklch(0.35 0.05 90);
+  --chart-4: oklch(0.55 0.06 200);
+  --chart-5: oklch(0.4 0.04 30);
+  --sidebar: oklch(0.1 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-primary: oklch(0.72 0.15 60);
+  --sidebar-primary-foreground: oklch(0.08 0 0);
+  --sidebar-accent: oklch(0.25 0.08 264.5);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(0.18 0 0);
+  --sidebar-ring: oklch(0.72 0.15 60);
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  /* Focus-visible outlines for shared PathOS UI (uses --p-accent token) */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid var(--p-accent, var(--ring));
+    outline-offset: 2px;
+  }
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-card;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded;
+  }
+  /* Day 36: Utility class to hide scrollbar while maintaining scroll functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+  /* Day 36: Tour lock - prevents body scroll when guided tour is active */
+  body.tour-locked {
+    overflow: hidden !important;
+  }
+}
+
+/* ============================================================================
+   RESUME FOCUS HIGHLIGHT
+   ============================================================================
+   
+   PURPOSE:
+   This class is applied temporarily (1.5s) to resume sections when the user
+   deep-links via the resumeFocus query parameter. It provides visual feedback
+   that the correct section has been found and scrolled to.
+   
+   HOW IT WORKS:
+   1. ResumeBuilderFocusHandler adds this class after scrolling
+   2. The ring and background animate to draw attention
+   3. After 1.5 seconds, the class is removed
+   
+   STYLING:
+   - Uses the accent color for consistency with the design system
+   - Ring effect draws attention without being jarring
+   - Background pulse is subtle but noticeable
+   
+   @version Day 14 - ResumeFocus Deep-Link Scroll + Highlight Bugfix
+============================================================================ */
+.resume-focus-highlight {
+  /* Ring effect using box-shadow for better cross-browser support */
+  box-shadow: 0 0 0 3px var(--ring);
+  
+  /* Subtle background tint */
+  background-color: color-mix(in oklch, var(--accent) 8%, transparent);
+  
+  /* Smooth transition for when the class is removed */
+  transition: box-shadow 0.3s ease-out, background-color 0.3s ease-out;
+}
+
+/* ============================================================================
+   ROUTE TRANSITIONS (Day 35)
+   ============================================================================
+   
+   PURPOSE:
+   Provides subtle fade + slide transitions when navigating between routes.
+   Only animates main content region, leaving sidebar/header static.
+   
+   HOW IT WORKS:
+   1. RouteTransition component wraps main content
+   2. On route change, applies exit animation (fade out + slide down)
+   3. New content enters with fade in + slide up
+   4. Respects prefers-reduced-motion (instant transition if preferred)
+   
+   STYLING:
+   - Subtle opacity + translateY animation (8-12px)
+   - 200ms duration for smooth but quick transition
+   - Ease-out timing for natural feel
+   
+   @version Day 35 - Route Transitions
+============================================================================ */
+.route-transition {
+  /* Base transition properties */
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.route-transition-enter {
+  /* Initial state: slightly below and transparent */
+  opacity: 0;
+  transform: translateY(10px);
+  
+  /* Animate to visible */
+  animation: route-enter 200ms ease-out forwards;
+}
+
+.route-transition-exit {
+  /* Exit state: fade out and slide down slightly */
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.route-transition-instant {
+  /* For reduced motion: instant transition, no animation */
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================================
+   GUIDED HANDOFF HIGHLIGHTS (Day 35)
+   ============================================================================
+   
+   PURPOSE:
+   Provides visual feedback when PathAdvisor guides user to a specific section.
+   Applied temporarily (~1500ms) to elements with data-handoff-target attribute.
+   
+   HOW IT WORKS:
+   1. PathAdvisor navigates with ?handoff=<id> query param
+   2. scrollAndPulse() finds element with matching data-handoff-target
+   3. Applies highlight class (pulse or static based on motion preference)
+   4. Removes class after duration
+   
+   STYLING:
+   - Pulse: Subtle glow ring + background pulse animation
+   - Static: Simple highlight for reduced motion users
+   - Uses accent color for consistency
+   
+   @version Day 35 - Guided Handoff
+============================================================================ */
+.handoff-highlight-pulse {
+  /* Ring effect using box-shadow */
+  box-shadow: 0 0 0 3px var(--ring);
+  
+  /* Subtle background tint */
+  background-color: color-mix(in oklch, var(--accent) 10%, transparent);
+  
+  /* Pulse animation */
+  animation: handoff-pulse 1500ms ease-out;
+}
+
+.handoff-highlight-static {
+  /* Static highlight for reduced motion users */
+  box-shadow: 0 0 0 3px var(--ring);
+  background-color: color-mix(in oklch, var(--accent) 10%, transparent);
+  
+  /* No animation, just static highlight */
+}
+
+@keyframes handoff-pulse {
+  0% {
+    box-shadow: 0 0 0 3px var(--ring);
+    background-color: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px var(--ring);
+    background-color: color-mix(in oklch, var(--accent) 15%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px var(--ring);
+    background-color: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+}

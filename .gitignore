@@ -49,6 +49,8 @@ id_ed25519
 **/htmlcov/
 **/.venv/
 **/venv/
+**/.tmp/
+**/pytest-cache-files-*/
 
 # JavaScript / TypeScript artifacts
 **/node_modules/
@@ -60,20 +62,19 @@ id_ed25519
 **/build/
 **/out/
 **/*.tsbuildinfo
+**/release/
 
 # Local databases and test output
 **/*.db
 **/*.sqlite
 **/*.sqlite3
+**/artifacts/
 **/artifactspytest_tmp/
+**/artifactspytest_cache/
 
 # Embedded git repositories and archived repos
 archives/
-apps/pathos-platform/backend/
-apps/pathos-platform/frontend/
-apps/pathos-platform/desktop-legacy-copy/
-n8n-lab/
-pathos-pipeline-operator/
+n8n-lab/tmp/
 
 # Workspace-private and generated top-level content
 .claude/

@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+*.tsbuildinfo
+.DS_Store
+data/*.db
+*.db
+.env
+.env.*
+
+# virtualenvs
+.venv/
+.venv-*/
+.venv-ci/
+
+
+# Generated patch artifacts
+artifacts/*.patch
+
+

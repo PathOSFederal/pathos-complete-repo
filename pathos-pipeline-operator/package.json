@@ -1,0 +1,30 @@
+{
+  "name": "pathos-pipeline-operator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PathOS Pipeline Operator Console - thin read-mostly GUI for pipeline supervision",
+  "scripts": {
+    "dev": "next dev --port 3777",
+    "build": "next build",
+    "start": "next start --port 3777",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.454.0",
+    "next": "^16.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}

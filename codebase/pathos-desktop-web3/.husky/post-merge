@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Post-merge hook runs after git pull or a local merge.
+# We use it as a friendly reminder to create an Option B docs summary PR.
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+
+if [ "$branch" = "develop" ]; then
+  shortsha="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+
+  echo ""
+  echo "Post-merge reminder: create a docs-only PR with a merge summary."
+  echo "Run:"
+  echo "  pnpm docs:merge-summary:pr --title \"Post-merge summary ($shortsha)\" --summary \"Auto-generated entry. Replace with a human summary.\""
+  echo ""
+  echo "Optional: set AUTO_MERGE_SUMMARY_PR=1 to auto-create the docs branch after every develop merge."
+  echo ""
+fi
+
+# Optional auto-run mode (off by default)
+if [ "$branch" = "develop" ] && [ "${AUTO_MERGE_SUMMARY_PR:-}" = "1" ]; then
+  shortsha="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+  pnpm docs:merge-summary:pr --title "Post-merge summary ($shortsha)" --summary "Auto-generated entry. Replace with a human summary."
+fi

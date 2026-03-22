@@ -1,0 +1,2362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>PathOS Desktop</title>
+    <link rel="stylesheet" href="./styles/pathos-web-theme.tokens.css" />
+    <link rel="stylesheet" href="./styles/pathos-theme.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="pathos-theme dark">
+    <!-- =============================================================== -->
+    <!-- WHY: This file defines the renderer shell and workspace layout. -->
+    <!-- HOW: Renderer JS binds behavior to IDs and data attributes below. -->
+    <!-- =============================================================== -->
+    <div
+      id="renderer-fatal-banner"
+      class="renderer-fatal-banner"
+      data-pathos-anchor="renderer-fatal-banner"
+      style="display: none"
+      hidden
+    >
+      PathOS UI failed to initialize (renderer error). Open DevTools to view details.
+    </div>
+    <div
+      id="renderer-error-banner"
+      class="renderer-error-banner"
+      data-pathos-anchor="renderer-error-banner"
+      style="display: none"
+      hidden
+    >
+      <div class="renderer-error-banner__message">
+        PathOS UI did not fully initialize. Open DevTools to view the error.
+      </div>
+      <button id="renderer-reload-btn" class="renderer-error-banner__button" type="button">
+        Reload
+      </button>
+    </div>
+    <!-- WHY: Day 64 – Workspace Focus Mode. Single global toggle lives in workbench bar next to status. -->
+    <!-- HOW: workbench-global-bar is first child of workbench; Focus toggle + status persist on all routes. -->
+    <div id="app-shell" class="app-shell">
+      <div class="workspace-left">
+      <nav id="left-nav" class="nav-rail">
+        <button id="nav-brand" class="nav-brand" type="button">
+          <span class="nav-logo">P</span>
+          <div>
+            <div class="nav-title">PathOS</div>
+            <div class="nav-subtitle">Desktop</div>
+          </div>
+        </button>
+        <div class="nav-section">
+          <div class="nav-label">Explorer</div>
+          <button
+            id="nav-saved-jobs"
+            class="nav-item is-active"
+            type="button"
+            aria-current="page"
+            aria-label="Dashboard"
+            title="Dashboard"
+          >
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+            <span class="nav-item-text">Dashboard</span>
+          </button>
+          <button id="nav-explore" class="nav-item" type="button" aria-label="USAJOBS (Official Listings)" title="USAJOBS (Official Listings)">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01"/><path d="M9 12v.01"/><path d="M9 15v.01"/><path d="M9 18v.01"/></svg></span>
+            <span class="nav-item-text">USAJOBS (Official Listings)</span>
+          </button>
+          <button id="nav-explore-pathos" class="nav-item" type="button" aria-label="Explore Careers (Guided by PathOS)" title="Explore Careers (Guided by PathOS)">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span>
+            <span class="nav-item-text">Explore Careers (Guided by PathOS)</span>
+          </button>
+          <button id="nav-alert-center" class="nav-item" type="button" aria-label="Alerts" title="Alerts">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+            <span class="nav-item-text">Alerts</span>
+          </button>
+          <button id="nav-resume-assets" class="nav-item has-badge" type="button" aria-label="Resume & Career" title="Resume & Career">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+            <span class="nav-item-text">Resume &amp; Career</span>
+            <span class="nav-badge is-hidden" data-resume-nav-badge>0</span>
+          </button>
+          <button id="nav-activity-log" class="nav-item has-badge" type="button" aria-label="Activity Log" title="Activity Log">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+            <span class="nav-item-text">Activity Log</span>
+            <span class="nav-badge is-hidden" data-activity-nav-badge>0</span>
+          </button>
+          <!-- WHY: This entry unlocks the structured Benefits workspace. -->
+          <!-- HOW: The renderer toggles the matching workspace view by id. -->
+          <button id="nav-benefits-comp" class="nav-item" type="button" aria-label="Benefits & Compensation" title="Benefits & Compensation">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+            <span class="nav-item-text">Benefits &amp; Compensation</span>
+          </button>
+          <button id="nav-settings" class="nav-item" type="button" aria-label="Settings" title="Settings">
+            <span class="nav-item-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+            <span class="nav-item-text">Settings</span>
+          </button>
+        </div>
+      </nav>
+
+      <main id="workspace" class="workbench">
+        <!-- WHY: One place for Focus toggle and view status on every page. -->
+        <!-- HOW: Renderer updates workbench-global-status when setActiveWorkspaceView runs. -->
+        <!-- WHY: Two-column layout so control cluster is right-aligned on every route. -->
+        <div
+          id="workbench-global-bar"
+          class="workbench-global-bar"
+          data-pathos-anchor="workbench-global-bar"
+        >
+          <div class="workbench-global-bar-left">
+            <span id="workbench-global-status" class="workbench-global-status" aria-live="polite">
+              Local list
+            </span>
+          </div>
+          <div class="workbench-global-bar-cluster">
+            <button
+              id="workspace-focus-toggle"
+              type="button"
+              class="workspace-focus-button"
+              aria-pressed="false"
+              aria-label="Toggle Focus Mode"
+              title="Focus Mode: expand workspace by collapsing navigation."
+            >
+              Focus Mode
+            </button>
+            <span id="workspace-focus-badge" class="workspace-focus-badge is-hidden" aria-hidden="true">
+              Active
+            </span>
+            <div class="alert-popover" data-alert-popover>
+              <button
+                class="alert-button"
+                type="button"
+                aria-expanded="false"
+                aria-label="Alerts"
+                title="Alerts"
+                data-alert-popover-toggle
+              >
+                <span class="alert-icon" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+                <span
+                  class="alert-badge"
+                  data-alert-preview-badge
+                  aria-hidden="true"
+                >
+                  0
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <section id="saved-jobs-view" class="workspace-view">
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Workspace</div>
+              <h1>Dashboard</h1>
+              <p>Quick overview of your PathOS workspace activity.</p>
+              <p>PathOS continuously analyzes USAJOBS listings to guide your career decisions.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="dashboard-layout">
+              <section class="dashboard-section is-status-summary">
+                <div class="dashboard-status-summary">
+                  Status: Job Seeker Mode active · 3 searches running · 2 alerts pending · Resume competitive
+                </div>
+                <div class="dashboard-section-header">
+                  <div>
+                    <div class="dashboard-section-eyebrow">Current State</div>
+                    <h2>Current State</h2>
+                  </div>
+                  <div class="dashboard-section-meta">Updated just now</div>
+                </div>
+                <div class="dashboard-card-grid">
+                  <div class="dashboard-card">
+                    <div class="dashboard-card-label">Mode</div>
+                    <div class="dashboard-card-value">Job Seeker Mode – Active</div>
+                    <div class="dashboard-card-meta">
+                      Tracking search focus and PathAdvisor guidance status.
+                    </div>
+                  </div>
+                  <div class="dashboard-card">
+                    <div class="dashboard-card-label">Searches Running</div>
+                    <div class="dashboard-card-value">3 Active Searches</div>
+                    <div class="dashboard-card-meta">
+                      USAJOBS alerts scanning saved criteria.
+                    </div>
+                  </div>
+                  <div class="dashboard-card">
+                    <div class="dashboard-card-label">Alerts Pending</div>
+                    <div class="dashboard-card-value">2 New Alerts</div>
+                    <div class="dashboard-card-meta">
+                      PathAdvisor flagged roles and next steps.
+                    </div>
+                  </div>
+                  <div class="dashboard-card">
+                    <div class="dashboard-card-label">Resume Readiness</div>
+                    <div class="dashboard-card-value">Competitive</div>
+                    <div class="dashboard-card-meta">
+                      One targeted update recommended this week.
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="dashboard-section">
+                <div class="dashboard-section-header">
+                  <div>
+                    <div class="dashboard-section-eyebrow">Insights</div>
+                    <h2>What Changed Since Last Time</h2>
+                  </div>
+                  <div class="dashboard-section-meta">Last sync: 2 hours ago</div>
+                </div>
+                <div class="dashboard-primary-insight">
+                  Primary Insight: A role you viewed closes in 4 days, creating a near-term decision window.
+                </div>
+                <div class="dashboard-card">
+                  <ul class="dashboard-insight-list">
+                    <li>
+                      <span class="dashboard-insight-title">
+                        2 new jobs match your saved criteria
+                      </span>
+                      <span class="dashboard-insight-meta">USAJOBS search updates</span>
+                    </li>
+                    <li>
+                      <span class="dashboard-insight-title">
+                        1 role you viewed is closing soon
+                      </span>
+                      <span class="dashboard-insight-meta">Deadline in 4 days</span>
+                    </li>
+                    <li>
+                      <span class="dashboard-insight-title">
+                        1 role may be under-qualified based on current resume
+                      </span>
+                      <span class="dashboard-insight-meta">Recommend a skills gap note</span>
+                    </li>
+                  </ul>
+                </div>
+              </section>
+              <section class="dashboard-section">
+                <div class="dashboard-section-header">
+                  <div>
+                    <div class="dashboard-section-eyebrow">Recommendations</div>
+                    <h2>Next Best Actions</h2>
+                  </div>
+                  <div class="dashboard-section-meta">Priority queue</div>
+                </div>
+                <div class="dashboard-action-intro">If you act today, PathOS recommends:</div>
+                <div class="dashboard-action-grid">
+                  <div class="dashboard-card dashboard-action-card">
+                    <div class="dashboard-card-label">Search focus</div>
+                    <div class="dashboard-card-value">
+                      Commit to GS-9/11 ladder roles for faster readiness
+                    </div>
+                    <div class="dashboard-card-subtext">
+                      Keeps targets aligned with near-term qualification depth.
+                    </div>
+                  </div>
+                  <div class="dashboard-card dashboard-action-card">
+                    <div class="dashboard-card-label">Resume signal</div>
+                    <div class="dashboard-card-value">
+                      Position your resume for Series 2210 screening language
+                    </div>
+                    <div class="dashboard-card-subtext">
+                      Improves qualification clarity during the first review pass.
+                    </div>
+                  </div>
+                  <div class="dashboard-card dashboard-action-card">
+                    <div class="dashboard-card-label">Agency prioritization</div>
+                    <div class="dashboard-card-value">
+                      Shift outreach toward agencies with faster hiring velocity
+                    </div>
+                    <div class="dashboard-card-subtext">
+                      Increases speed-to-decision while demand is highest.
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+        <section id="activity-log-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Workspace</div>
+              <h1>Activity Log</h1>
+              <p>Review recent selections and workspace updates.</p>
+            </div>
+            <div class="workbench-header-actions">
+              <button id="activity-log-back" class="workbench-action-button" type="button">
+                Back to Dashboard
+              </button>
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="activity-log-page" data-activity-log-page>
+              <div class="activity-log-page-title">Recent Activity</div>
+              <p class="activity-log-page-copy">
+                Use the bottom tray to review recent job selections and workspace updates while staying in context.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section id="explore-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">USAJOBS</div>
+              <h1>USAJOBS (Official Listings)</h1>
+              <p>
+                Official job listings sourced directly from USAJOBS.gov.
+                Use this view to reference posting details and official application information.
+              </p>
+              <p class="workbench-helper">
+                Want guided exploration?
+                <button class="pathos-explore-link" type="button" data-nav-link="explore-pathos">
+                  Open Explore Careers.
+                </button>
+              </p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div
+              class="embedded-browser-bar"
+              aria-label="Embedded browser controls"
+              tabindex="0"
+            >
+              <div class="embedded-controls">
+                <button
+                  id="usajobs-back"
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Back"
+                  title="Back"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">&lt;</span>
+                  <span class="embedded-control-label">Back</span>
+                </button>
+                <button
+                  id="usajobs-forward"
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Forward"
+                  title="Forward"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">&gt;</span>
+                  <span class="embedded-control-label">Forward</span>
+                </button>
+                <button
+                  id="usajobs-refresh"
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Refresh"
+                  title="Refresh"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">R</span>
+                  <span class="embedded-control-label">Refresh</span>
+                </button>
+                <button
+                  id="usajobs-home"
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Home"
+                  title="Home"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">H</span>
+                  <span class="embedded-control-label">Home</span>
+                </button>
+              </div>
+              <div class="embedded-trust-pill">USAJOBS.gov</div>
+              <div class="embedded-escape">
+                <button
+                  id="usajobs-open-external"
+                  class="embedded-control-button is-primary"
+                  type="button"
+                  aria-label="Open current page in your default browser"
+                  title="Open current page in your default browser"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">Ext</span>
+                  <span class="embedded-control-label">Open in browser</span>
+                </button>
+              </div>
+              <div id="usajobs-loading" class="embedded-loading" aria-hidden="true"></div>
+            </div>
+            <div class="webview-frame">
+              <div class="usajobs-viewport-clip">
+                <div id="usajobs-viewport" class="usajobs-viewport"></div>
+              </div>
+              <div class="webview-fallback" hidden>
+                USAJOBS failed to load. Check connectivity or restart.
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="explore-pathos-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">PathOS</div>
+              <h1>Explore Careers (Guided by PathOS)</h1>
+              <p data-pathos-anchor="explore-pathos-intro">
+                PathOS allows you to use the power of AI to prompt your federal job search. It explores USAJOBS listings on your behalf so you can find what you're looking for in seconds.
+              </p>
+              <p class="workbench-helper">
+                Need the official posting?
+                <button class="pathos-explore-link" type="button" data-nav-link="explore">
+                  Open USAJOBS.
+                </button>
+              </p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="pathos-explore-scroll">
+              <div class="pathos-explore-layout">
+                <div class="pathos-explore-main">
+                <div class="pathos-explore-card pathos-explore-prompt-card">
+                  <label class="pathos-explore-label" for="explore-pathos-prompt">
+                    Prompt
+                  </label>
+                  <textarea
+                    id="explore-pathos-prompt"
+                    class="pathos-explore-textarea"
+                    rows="5"
+                    data-explore-prompt
+                  ></textarea>
+                  <div class="pathos-explore-prompt-actions">
+                    <button class="benefits-action is-outline" type="button" data-explore-example>
+                      Use examples
+                    </button>
+                    <button class="benefits-action is-primary" type="button" data-explore-submit>
+                      <span
+                        class="pathos-explore-spinner"
+                        data-explore-submit-spinner
+                        aria-hidden="true"
+                      ></span>
+                      <span data-explore-submit-label>Explore Roles</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="pathos-explore-results-header">
+                  <h2>Recommended Roles</h2>
+                  <div class="pathos-explore-results-meta" data-explore-results-meta>
+                    0 roles
+                  </div>
+                </div>
+                <div class="pathos-explore-results" data-explore-results></div>
+                <div class="pathos-explore-empty" data-explore-empty>
+                  Run an exploration to see recommended roles and PathAdvisor reasoning.
+                </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="resume-assets-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Resume &amp; Career</div>
+              <h1>Resume &amp; Career</h1>
+              <p>AI-Guided Federal Resume Workspace</p>
+              <p>
+                PathAdvisor generates USAJOBS-compliant federal resumes tied to specific roles.
+              </p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div
+              class="resume-career-layout resume-career-scroll"
+              data-testid="resume-career-scroll"
+            >
+              <div class="resume-career-main">
+                <section class="resume-overview-card" data-resume-overview>
+                  <div class="resume-overview-header">
+                    <div>
+                      <div class="resume-section-eyebrow">Federal Resume Overview</div>
+                      <h2>Federal Resume Overview</h2>
+                    </div>
+                    <span class="resume-badge">Federal Resume – USAJOBS Format</span>
+                  </div>
+                  <div class="resume-overview-grid">
+                    <div class="resume-overview-item">
+                      <div class="resume-overview-label">Federal Resumes Created</div>
+                      <div class="resume-overview-value" data-resume-overview-created>0</div>
+                    </div>
+                    <div class="resume-overview-item">
+                      <div class="resume-overview-label">Jobs Linked to Resumes</div>
+                      <div class="resume-overview-value" data-resume-overview-linked>0</div>
+                    </div>
+                    <div class="resume-overview-item">
+                      <div class="resume-overview-label">Last Resume Modified</div>
+                      <div class="resume-overview-value" data-resume-overview-modified>--</div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="resume-current-job-card" data-resume-current-job-card>
+                  <div class="resume-section-header">
+                    <div>
+                      <div class="resume-section-eyebrow">Current selection</div>
+                      <h2>Current selection</h2>
+                    </div>
+                    <span class="resume-badge" data-resume-current-job-source hidden>
+                      USAJOBS
+                    </span>
+                  </div>
+                  <div class="privacy-card" data-privacy-card>
+                    <div class="privacy-card-header">
+                      <div class="resume-card-title" data-resume-current-job-title>
+                        No job selected yet
+                      </div>
+                      <button
+                        class="privacy-toggle"
+                        type="button"
+                        data-privacy-toggle
+                        data-selected-job-privacy-toggle
+                        aria-pressed="false"
+                      >
+                        Hide details
+                      </button>
+                    </div>
+                    <div class="privacy-card-body" data-privacy-body>
+                      <div data-resume-current-job-content hidden>
+                        <p class="resume-section-copy" data-resume-current-job-summary>
+                          Select a job in Job Search to set resume context.
+                        </p>
+                        <div class="resume-section-meta" data-resume-current-job-meta></div>
+                      </div>
+                      <div data-resume-current-job-empty>
+                        <p class="resume-section-copy">
+                          No job selected. Select a job in Job Search to set context.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="privacy-card-mask" data-privacy-mask hidden>
+                      Details hidden. Toggle to view.
+                    </div>
+                  </div>
+                </section>
+
+                <section class="resume-targets-card" data-resume-targets-card>
+                  <div class="resume-section-header">
+                    <div>
+                      <div class="resume-section-eyebrow">Resume &amp; Career</div>
+                      <h2>Jobs added to Resume &amp; Career</h2>
+                    </div>
+                    <div class="resume-section-meta" data-resume-target-count>0 jobs</div>
+                  </div>
+                  <div class="resume-target-list" data-resume-target-list></div>
+                  <div class="resume-empty" data-resume-target-empty hidden>
+                    <div>No jobs added yet.</div>
+                    <div>
+                      Use Activity Log to add job selections to Resume &amp; Career.
+                    </div>
+                  </div>
+                  <div
+                    class="resume-link-dialog"
+                    role="dialog"
+                    aria-label="Link job to resume"
+                    hidden
+                    data-resume-link-dialog
+                  >
+                    <div class="resume-link-grid">
+                      <label class="resume-field">
+                        <span>Job Title</span>
+                        <input type="text" data-resume-job-title placeholder="Program Analyst" />
+                      </label>
+                      <label class="resume-field">
+                        <span>Agency</span>
+                        <input
+                          type="text"
+                          data-resume-job-agency
+                          placeholder="Department of Education"
+                        />
+                      </label>
+                      <label class="resume-field">
+                        <span>Grade Level</span>
+                        <input type="text" data-resume-job-grade placeholder="GS-9" />
+                      </label>
+                      <label class="resume-field">
+                        <span>Announcement #</span>
+                        <input
+                          type="text"
+                          data-resume-job-announcement
+                          placeholder="ED-2026-0234"
+                        />
+                      </label>
+                    </div>
+                    <div class="resume-link-error" data-resume-link-error hidden></div>
+                    <div class="resume-link-actions">
+                      <button
+                        class="resume-action is-outline"
+                        type="button"
+                        data-resume-link-cancel
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        class="resume-action is-primary"
+                        type="button"
+                        data-resume-link-submit
+                      >
+                        Create resume
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="resume-library">
+                  <div class="resume-section-header">
+                    <div>
+                      <div class="resume-section-eyebrow">Library</div>
+                      <h2>Your Federal Resumes</h2>
+                    </div>
+                    <div class="resume-section-meta" data-resume-library-count>2 resumes</div>
+                  </div>
+                  <div class="resume-card-list" data-resume-list>
+                    <article class="resume-card is-active" data-resume-card>
+                      <div class="resume-card-header">
+                        <div>
+                          <div class="resume-card-title">Program Analyst</div>
+                          <div class="resume-card-subtitle">
+                            Department of Education · GS-9
+                          </div>
+                        </div>
+                        <span class="resume-status-pill is-draft">Draft</span>
+                      </div>
+                      <div class="resume-card-meta">Program Analyst – ED – v1</div>
+                      <div class="resume-card-meta">Announcement: ED-2026-0234</div>
+                      <div class="resume-card-foot">
+                        <div class="resume-card-generated">
+                          Generated by PathAdvisor · Updated just now
+                        </div>
+                        <div class="resume-card-actions">
+                          <button class="resume-kebab" type="button">⋯</button>
+                        </div>
+                      </div>
+                    </article>
+                    <article class="resume-card" data-resume-card>
+                      <div class="resume-card-header">
+                        <div>
+                          <div class="resume-card-title">Policy Analyst</div>
+                          <div class="resume-card-subtitle">
+                            Department of Health and Human Services · GS-11
+                          </div>
+                        </div>
+                        <span class="resume-status-pill is-applied">Applied</span>
+                      </div>
+                      <div class="resume-card-meta">Policy Analyst – HHS – v2</div>
+                      <div class="resume-card-meta">Announcement: HHS-2026-1178</div>
+                      <div class="resume-card-foot">
+                        <div class="resume-card-generated">
+                          Generated by PathAdvisor · Updated today
+                        </div>
+                        <div class="resume-card-actions">
+                          <button class="resume-kebab" type="button">⋯</button>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="resume-empty" data-resume-empty hidden>
+                    <div>No federal resumes yet.</div>
+                    <div>
+                      Select a job in Job Search or use Link job to create your first resume.
+                    </div>
+                  </div>
+                </section>
+
+                <section class="resume-detail" data-resume-detail>
+                  <div class="resume-section-header">
+                    <div>
+                      <div class="resume-section-eyebrow">Federal Resume Detail</div>
+                      <h2>Federal Resume Detail</h2>
+                    </div>
+                    <div class="resume-detail-actions">
+                      <button class="resume-action is-outline" type="button" data-resume-readonly>
+                        Read-Only View
+                      </button>
+                      <button class="resume-action is-primary" type="button" data-resume-export>
+                        Export for USAJOBS
+                      </button>
+                    </div>
+                  </div>
+                  <div class="resume-export-note" data-resume-export-note>
+                    Export generates a file for manual upload during your USAJOBS application.
+                  </div>
+                  <div class="resume-detail-empty" data-resume-detail-empty hidden>
+                    Select a resume to view USAJOBS-compliant details.
+                  </div>
+                  <div class="resume-detail-body" data-resume-detail-body>
+                    <section class="resume-panel">
+                      <div class="resume-panel-title">Target Position</div>
+                      <div class="resume-panel-grid">
+                        <div>
+                          <div class="resume-field-label">Job Title</div>
+                          <div data-resume-target-title>Program Analyst</div>
+                        </div>
+                        <div>
+                          <div class="resume-field-label">Agency</div>
+                          <div data-resume-target-agency>Department of Education</div>
+                        </div>
+                        <div>
+                          <div class="resume-field-label">Grade Level</div>
+                          <div data-resume-target-grade>GS-9</div>
+                        </div>
+                        <div>
+                          <div class="resume-field-label">Announcement Number</div>
+                          <div data-resume-target-announcement>ED-2026-0234</div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="resume-panel">
+                      <div class="resume-panel-title">Work Experience</div>
+                      <div class="resume-work-list" data-resume-work-list>
+                        <div class="resume-work-card">
+                          <div class="resume-work-header">
+                            <div>
+                              <div class="resume-work-title">Research Assistant</div>
+                              <div class="resume-work-org">University Research Center</div>
+                            </div>
+                            <div class="resume-work-period">06/2024 – Present</div>
+                          </div>
+                          <div class="resume-work-grid">
+                            <div>
+                              <div class="resume-field-label">Location</div>
+                              <div>Washington, DC</div>
+                            </div>
+                            <div>
+                              <div class="resume-field-label">Hours per week</div>
+                              <div>40 hours/week</div>
+                            </div>
+                            <div>
+                              <div class="resume-field-label">Salary</div>
+                              <div>$52,000/year</div>
+                            </div>
+                            <div>
+                              <div class="resume-field-label">Supervisor</div>
+                              <div>Dr. Sarah Johnson</div>
+                            </div>
+                            <div>
+                              <div class="resume-field-label">Supervisor Phone</div>
+                              <div>(202) 555-0123</div>
+                            </div>
+                            <div>
+                              <div class="resume-field-label">May we contact this supervisor?</div>
+                              <div>Yes</div>
+                            </div>
+                          </div>
+                          <div class="resume-work-duties">
+                            <div class="resume-field-label">Duties and Accomplishments</div>
+                            <ul>
+                              <li>
+                                Analyzed federal education policy data sets containing over 50,000
+                                data points to identify trends in student achievement.
+                              </li>
+                              <li>
+                                Collaborated with a cross-functional team of 8 researchers to design
+                                and implement qualitative research studies.
+                              </li>
+                              <li>
+                                Developed and maintained complex Excel databases and data dashboards
+                                to track program outcomes.
+                              </li>
+                              <li>
+                                Prepared briefing materials and executive summaries for senior
+                                leadership.
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="resume-panel">
+                      <div class="resume-panel-title">Education</div>
+                      <div class="resume-education-card" data-resume-education>
+                        <div class="resume-education-title">
+                          Bachelor of Arts in Public Policy
+                        </div>
+                        <div class="resume-education-meta">
+                          Georgetown University · Washington, DC
+                        </div>
+                        <div class="resume-education-grid">
+                          <div>
+                            <div class="resume-field-label">Completion Date</div>
+                            <div>05/2025</div>
+                          </div>
+                          <div>
+                            <div class="resume-field-label">GPA</div>
+                            <div>3.7/4.0</div>
+                          </div>
+                          <div>
+                            <div class="resume-field-label">Credit Hours</div>
+                            <div>120 semester hours</div>
+                          </div>
+                        </div>
+                        <div class="resume-coursework">
+                          <div class="resume-field-label">Relevant Coursework</div>
+                          <div class="resume-tag-row">
+                            <span class="resume-tag">Education Policy Analysis</span>
+                            <span class="resume-tag">Public Administration</span>
+                            <span class="resume-tag">Quantitative Research Methods</span>
+                            <span class="resume-tag">Program Evaluation</span>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                    <div class="resume-readonly-copy" data-resume-readonly-copy>
+                      This is a read-only view of your federal resume. To make changes, use
+                      PathAdvisor. All resumes are generated in strict compliance with USAJOBS
+                      federal resume requirements.
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="benefits-guide-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Guidance</div>
+              <h1>Benefits Guide</h1>
+              <p>Learn about federal benefits with PathOS-authored notes.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="workspace-scaffold">
+              <div class="workspace-scaffold-header">
+                <div class="workspace-scaffold-title">Benefit topics</div>
+                <div class="workspace-scaffold-meta">PathOS guidance</div>
+              </div>
+              <div class="workspace-scaffold-card">
+                <div class="workspace-scaffold-label">Coverage areas</div>
+                <ul class="workspace-scaffold-list">
+                  <li>Health, dental, and vision plans.</li>
+                  <li>Retirement and pension basics.</li>
+                  <li>Leave, holidays, and flexibility.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- =============================================================== -->
+        <!-- WHY: Benefits & Compensation is a first-class, multi-frame workspace. -->
+        <!-- HOW: The renderer toggles internal frames and embeds external tools. -->
+        <!-- =============================================================== -->
+        <section id="benefits-comp-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Workspace</div>
+              <h1>Benefits &amp; Compensation</h1>
+              <p>Compare federal and private structures with guided references.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="benefits-workspace">
+              <div class="benefits-content">
+                <div class="benefits-tabs" aria-label="Sections">
+                  <div class="benefits-tabs-label">Sections</div>
+                  <div class="benefits-tabs-strip">
+                    <button class="benefits-tab is-active" type="button" data-benefits-rail="overview">
+                      Start
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="salary">
+                      Salary
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="retirement">
+                      Retirement
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="health">
+                      Health
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="risk">
+                      Risk
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="tools">
+                      Tools
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="decision">
+                      Snapshot
+                    </button>
+                    <button class="benefits-tab" type="button" data-benefits-rail="outlook">
+                      Outlook
+                    </button>
+                  </div>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="overview">
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Start</div>
+                      <h2>Start</h2>
+                      <p>
+                        Start here to prioritize the sections below. You can still review
+                        everything, but this choice surfaces what matters most first.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">What this workspace shows</div>
+                    <ul class="benefits-list">
+                      <li>How federal compensation is structured.</li>
+                      <li>How benefits differ from private sector norms.</li>
+                      <li>Where tradeoffs usually occur.</li>
+                      <li>What external tools can help validate details.</li>
+                    </ul>
+                  </div>
+                  <div class="benefits-card benefits-routing-card">
+                    <div class="benefits-card-title">Where should we start?</div>
+                    <div class="benefits-routing-options">
+                      <button class="benefits-route-option" type="button" data-benefits-route="salary">
+                        Pay differences
+                      </button>
+                      <button class="benefits-route-option" type="button" data-benefits-route="retirement">
+                        Benefits &amp; retirement
+                      </button>
+                      <button class="benefits-route-option" type="button" data-benefits-route="health">
+                        Health insurance
+                      </button>
+                      <button class="benefits-route-option" type="button" data-benefits-route="risk">
+                        Risk &amp; stability
+                      </button>
+                      <button class="benefits-route-option" type="button" data-benefits-route="all">
+                        Show everything
+                      </button>
+                    </div>
+                    <p class="benefits-card-footnote">
+                      This only reorders what is shown first. You can explore everything later.
+                    </p>
+                  </div>
+                  <details class="benefits-section" data-benefits-section="salary">
+                    <summary class="benefits-section-title">Salary &amp; Compensation</summary>
+                    <div class="benefits-section-body">
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Federal structure</div>
+                        <ul class="benefits-list">
+                          <li>GS grade + step define base salary bands.</li>
+                          <li>Locality adjustments apply by region.</li>
+                          <li>Progression is transparent and schedule-based.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Private structure</div>
+                        <ul class="benefits-list">
+                          <li>Base pay varies by company and role scope.</li>
+                          <li>Bonus and equity introduce variability.</li>
+                          <li>Negotiation and timing shift outcomes.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">References to explore</div>
+                        <div class="benefits-card-actions">
+                          <button
+                            class="benefits-action is-primary"
+                            type="button"
+                            data-benefits-open-overview="federal-pay"
+                          >
+                            Explore GS pay tables (guided)
+                          </button>
+                          <button
+                            class="benefits-action is-outline"
+                            type="button"
+                            data-benefits-open-tool="private-salary-estimates"
+                          >
+                            Explore private salary estimates (guided)
+                          </button>
+                          <div class="benefits-placeholder-note">
+                            Placeholder link, replace with final source.
+                          </div>
+                        </div>
+                      </div>
+                      <p class="benefits-question">
+                        Which pay structure needs the first pass comparison?
+                      </p>
+                    </div>
+                  </details>
+                  <details class="benefits-section" data-benefits-section="retirement">
+                    <summary class="benefits-section-title">Retirement</summary>
+                    <div class="benefits-section-body">
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">FERS components</div>
+                        <ul class="benefits-list">
+                          <li>Basic annuity provides a defined pension layer.</li>
+                          <li>Social Security remains in the stack.</li>
+                          <li>TSP adds defined-contribution flexibility.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Private 401(k) structure</div>
+                        <ul class="benefits-list">
+                          <li>Employer match varies by plan policy.</li>
+                          <li>Contribution rates drive compounding outcomes.</li>
+                          <li>Withdrawals depend on vesting and plan rules.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Tools to explore</div>
+                        <div class="benefits-card-actions">
+                          <button
+                            class="benefits-action is-primary"
+                            type="button"
+                            data-benefits-open-overview="tsp-calculators"
+                          >
+                            Explore TSP calculators (guided)
+                          </button>
+                          <button
+                            class="benefits-action is-outline"
+                            type="button"
+                            data-benefits-open-tool="public-401k-estimator"
+                          >
+                            Explore public 401k estimator (guided)
+                          </button>
+                          <div class="benefits-placeholder-note">
+                            Placeholder link, replace with final source.
+                          </div>
+                        </div>
+                      </div>
+                      <p class="benefits-question">
+                        Which retirement layer should we baseline first?
+                      </p>
+                    </div>
+                  </details>
+                  <details class="benefits-section" data-benefits-section="health">
+                    <summary class="benefits-section-title">Health Insurance</summary>
+                    <div class="benefits-section-body">
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">FEHB overview</div>
+                        <ul class="benefits-list">
+                          <li>Multiple carriers and plan types under one program.</li>
+                          <li>Employer contribution reduces monthly premiums.</li>
+                          <li>Plan choice and region affect out-of-pocket totals.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Plan categories</div>
+                        <ul class="benefits-list">
+                          <li>HMO plans emphasize network care.</li>
+                          <li>PPO/POS plans balance network and flexibility.</li>
+                          <li>HDHP plans trade premiums for savings potential.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Reference to explore</div>
+                        <div class="benefits-card-actions">
+                          <button
+                            class="benefits-action is-primary"
+                            type="button"
+                            data-benefits-open-tool="opm-fehb-compare"
+                          >
+                            Explore FEHB plan comparison (guided)
+                          </button>
+                        </div>
+                      </div>
+                      <p class="benefits-question">
+                        Which plan category should we compare first?
+                      </p>
+                    </div>
+                  </details>
+                  <details class="benefits-section" data-benefits-section="risk">
+                    <summary class="benefits-section-title">Risk &amp; Tradeoffs</summary>
+                    <div class="benefits-section-body">
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Federal failure modes</div>
+                        <ul class="benefits-list">
+                          <li>Promotion timelines are structured and slower.</li>
+                          <li>Budget changes can alter growth pace.</li>
+                          <li>Role mobility depends on grade and series.</li>
+                        </ul>
+                      </div>
+                      <div class="benefits-card">
+                        <div class="benefits-card-title">Private failure modes</div>
+                        <ul class="benefits-list">
+                          <li>Compensation can shift with market conditions.</li>
+                          <li>Role stability varies by company health.</li>
+                          <li>Upside depends on performance and timing.</li>
+                        </ul>
+                      </div>
+                      <p class="benefits-question">
+                        Which risk category needs the clearest comparison?
+                      </p>
+                    </div>
+                  </details>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="salary" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Section</div>
+                      <h2>Salary &amp; Compensation</h2>
+                      <p>
+                        Start with the structural differences, then pick a reference
+                        to validate the numbers.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="benefits-grid">
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Federal structure</div>
+                      <ul class="benefits-list">
+                        <li>GS grade + step define base ranges.</li>
+                        <li>Locality pay adjusts by region.</li>
+                        <li>Scheduled progression provides predictability.</li>
+                      </ul>
+                    </div>
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Private structure</div>
+                      <ul class="benefits-list">
+                        <li>Base pay varies by company and role scope.</li>
+                        <li>Bonus/equity introduce variance.</li>
+                        <li>Negotiation and timing affect totals.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">Next references</div>
+                    <div class="benefits-card-actions">
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-overview="federal-pay"
+                      >
+                        Explore federal pay references (guided)
+                      </button>
+                      <button
+                        class="benefits-action is-outline"
+                        type="button"
+                        data-benefits-open-tool="private-salary-estimates"
+                      >
+                        Explore private salary estimates (guided)
+                      </button>
+                      <div class="benefits-placeholder-note">
+                        Placeholder link, replace with final source.
+                      </div>
+                    </div>
+                  </div>
+                  <p class="benefits-question">
+                    Which pay structure should we validate first?
+                  </p>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="retirement" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Section</div>
+                      <h2>Retirement</h2>
+                      <p>
+                        Review the layers of federal retirement and compare them
+                        with private 401(k) structures.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="benefits-grid">
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Federal retirement stack</div>
+                      <ul class="benefits-list">
+                        <li>FERS annuity anchors the base.</li>
+                        <li>Social Security adds a shared layer.</li>
+                        <li>TSP adds flexibility and matching.</li>
+                      </ul>
+                    </div>
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Private retirement stack</div>
+                      <ul class="benefits-list">
+                        <li>401(k) match varies by employer.</li>
+                        <li>Contribution rates drive growth.</li>
+                        <li>Vesting controls long-term retention value.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">References to explore</div>
+                    <div class="benefits-card-actions">
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-overview="tsp-calculators"
+                      >
+                        Explore TSP calculators (guided)
+                      </button>
+                      <button
+                        class="benefits-action is-outline"
+                        type="button"
+                        data-benefits-open-tool="public-401k-estimator"
+                      >
+                        Explore public 401k estimator (guided)
+                      </button>
+                      <div class="benefits-placeholder-note">
+                        Placeholder link, replace with final source.
+                      </div>
+                    </div>
+                  </div>
+                  <p class="benefits-question">
+                    Which retirement layer should be grounded in a reference first?
+                  </p>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="health" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Section</div>
+                      <h2>Health Insurance</h2>
+                      <p>
+                        FEHB is a structured program with multiple carrier options.
+                        Use the comparison tool to validate plan categories.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="benefits-grid">
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">FEHB program shape</div>
+                      <ul class="benefits-list">
+                        <li>One program, multiple carrier options.</li>
+                        <li>Employer contributions reduce premiums.</li>
+                        <li>Plan choice affects out-of-pocket totals.</li>
+                      </ul>
+                    </div>
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Plan categories</div>
+                      <ul class="benefits-list">
+                        <li>HMO: network-centered care.</li>
+                        <li>PPO/POS: broader access with tradeoffs.</li>
+                        <li>HDHP: higher deductibles with savings potential.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">Reference to explore</div>
+                    <div class="benefits-card-actions">
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="opm-fehb-compare"
+                      >
+                        Explore FEHB plan comparison (guided)
+                      </button>
+                    </div>
+                  </div>
+                  <p class="benefits-question">
+                    Which plan category should we compare first?
+                  </p>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="risk" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Section</div>
+                      <h2>Risk &amp; Tradeoffs</h2>
+                      <p>
+                        Map the common failure modes so you can weigh stability
+                        against upside.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="benefits-grid">
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Federal failure modes</div>
+                      <ul class="benefits-list">
+                        <li>Promotion pace is predictable but slower.</li>
+                        <li>Budget shifts can change program direction.</li>
+                        <li>Mobility depends on grade and series.</li>
+                      </ul>
+                    </div>
+                    <div class="benefits-card">
+                      <div class="benefits-card-title">Private failure modes</div>
+                      <ul class="benefits-list">
+                        <li>Comp changes can happen quickly.</li>
+                        <li>Role stability depends on company health.</li>
+                        <li>Upside depends on performance and timing.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <p class="benefits-question">
+                    Which risk category should we validate first?
+                  </p>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="tsp-chooser" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Tool Overview</div>
+                      <h2>TSP Calculators – What Each One Is For</h2>
+                      <p>Select a reference to open in guided mode.</p>
+                    </div>
+                  </div>
+                  <div class="benefits-grid">
+                    <div class="benefits-card" data-benefits-tool-id="tsp-calculators">
+                      <div class="benefits-card-title">TSP Account Balance Calculator</div>
+                      <p class="benefits-card-copy">
+                        Estimate how contributions and growth may accumulate over time.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="tsp-calculators"
+                      >
+                        Open calculator (guided)
+                      </button>
+                    </div>
+                    <div class="benefits-card" data-benefits-tool-id="tsp-calculators">
+                      <div class="benefits-card-title">TSP Retirement Income Calculator</div>
+                      <p class="benefits-card-copy">
+                        Translate balances into approximate retirement income ranges.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="tsp-calculators"
+                      >
+                        Open calculator (guided)
+                      </button>
+                    </div>
+                    <div class="benefits-card" data-benefits-tool-id="tsp-calculators">
+                      <div class="benefits-card-title">TSP Contribution Impact Calculator</div>
+                      <p class="benefits-card-copy">
+                        Compare how contribution rates shift the outcome.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="tsp-calculators"
+                      >
+                        Open calculator (guided)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="pay-chooser" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Tool Overview</div>
+                      <h2>Federal Pay Systems – What You’re Looking At</h2>
+                      <p>Select a reference to open in guided mode.</p>
+                    </div>
+                  </div>
+                  <div class="benefits-grid">
+                    <div class="benefits-card" data-benefits-tool-id="opm-gs-pay-tables">
+                      <div class="benefits-card-title">GS Base Pay Table</div>
+                      <p class="benefits-card-copy">
+                        Review the base table to understand grade and step bands.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="opm-gs-pay-tables"
+                      >
+                        View reference (guided)
+                      </button>
+                    </div>
+                    <div class="benefits-card" data-benefits-tool-id="opm-gs-pay-tables">
+                      <div class="benefits-card-title">GS Locality Pay Tables</div>
+                      <p class="benefits-card-copy">
+                        Add regional adjustments to the base table values.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="opm-gs-pay-tables"
+                      >
+                        View reference (guided)
+                      </button>
+                    </div>
+                    <div class="benefits-card" data-benefits-tool-id="opm-gs-pay-tables">
+                      <div class="benefits-card-title">Special Rate Tables</div>
+                      <p class="benefits-card-copy">
+                        Identify roles with supplemental pay structures.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="opm-gs-pay-tables"
+                      >
+                        View reference (guided)
+                      </button>
+                    </div>
+                    <div class="benefits-card" data-benefits-tool-id="opm-gs-pay-tables">
+                      <div class="benefits-card-title">Pay Caps and Progression Rules</div>
+                      <p class="benefits-card-copy">
+                        Review upper bounds and progression constraints.
+                      </p>
+                      <button
+                        class="benefits-action is-primary"
+                        type="button"
+                        data-benefits-open-tool="opm-gs-pay-tables"
+                      >
+                        View reference (guided)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="benefits-frame benefits-embedded-frame" data-benefits-frame="calculator" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Tool reference</div>
+                      <h2 data-benefits-tool-title>Calculator</h2>
+                      <div class="benefits-source">
+                        Source: <span data-benefits-tool-source>External</span>
+                      </div>
+                    </div>
+                    <div
+                      class="benefits-placeholder"
+                      data-benefits-tool-warning
+                      hidden
+                    >
+                      Placeholder link, replace with final source.
+                    </div>
+                  </div>
+                  <div class="benefits-trust-banner benefits-trust-banner--compact">
+                    External tool opened in a separate window. PathOS does not collect, read,
+                    or modify any data entered there.
+                  </div>
+                  <div class="benefits-popout-card">
+                    <div class="benefits-popout-card-title">
+                      This tool opened in a separate window.
+                    </div>
+                    <p class="benefits-popout-card-copy">
+                      Keep reviewing Benefits &amp; Compensation while the tool stays open.
+                    </p>
+                    <div class="benefits-embedded-actions">
+                      <button
+                        class="benefits-action"
+                        type="button"
+                        data-benefits-popout-close
+                        disabled
+                      >
+                        Close tool window
+                      </button>
+                      <button
+                        class="benefits-action"
+                        type="button"
+                        data-benefits-open-chooser
+                      >
+                        Open another calculator
+                      </button>
+                      <button
+                        class="benefits-action"
+                        type="button"
+                        data-benefits-return
+                      >
+                        Return
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="decision" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Decision Snapshot</div>
+                      <h2>Decision Snapshot</h2>
+                      <p>Directional signals only. No scores or guarantees.</p>
+                    </div>
+                  </div>
+                  <div class="benefits-card privacy-card" data-privacy-card>
+                    <div class="privacy-card-header">
+                      <div class="benefits-card-title">Signals</div>
+                      <button
+                        class="privacy-toggle"
+                        type="button"
+                        data-privacy-toggle
+                        aria-pressed="false"
+                      >
+                        Hide details
+                      </button>
+                    </div>
+                    <div class="privacy-card-body" data-privacy-body>
+                      <ul class="benefits-list">
+                        <li>Compensation stability: Federal ▲</li>
+                        <li>Upside variability: Private ▲</li>
+                        <li>Insurance predictability: Federal ▲</li>
+                        <li>Short-term cash potential: Private ▲</li>
+                        <li>Long-term security: Federal ▲</li>
+                      </ul>
+                    </div>
+                    <div class="privacy-card-mask" data-privacy-mask hidden>
+                      Details hidden. Toggle to view.
+                    </div>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">What this typically means</div>
+                    <p class="benefits-card-copy">
+                      Federal roles trade upside for reliability. Private roles trade
+                      predictability for higher upside potential.
+                    </p>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">Relevant next actions</div>
+                    <ul class="benefits-list">
+                      <li>Confirm which pay structure is most realistic.</li>
+                      <li>Validate health and retirement assumptions.</li>
+                      <li>List the risks you would accept for upside.</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="benefits-frame" data-benefits-frame="outlook" hidden>
+                  <div class="benefits-frame-header">
+                    <div>
+                      <div class="benefits-frame-eyebrow">Personal Outlook</div>
+                      <h2>Personal Outlook</h2>
+                      <p>
+                        Approximate synthesis based on structures, not precise
+                        dollars. No guarantees.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="benefits-card privacy-card" data-privacy-card>
+                    <div class="privacy-card-header">
+                      <div class="benefits-card-title">Outlook summary</div>
+                      <button
+                        class="privacy-toggle"
+                        type="button"
+                        data-privacy-toggle
+                        aria-pressed="false"
+                      >
+                        Hide details
+                      </button>
+                    </div>
+                    <div class="privacy-card-body" data-privacy-body>
+                      <div class="benefits-outlook-row">
+                        <div class="benefits-outlook-label">Retirement Timing (Approximate)</div>
+                        <div class="benefits-outlook-value">58–62 (range example)</div>
+                      </div>
+                      <div class="benefits-outlook-row">
+                        <div class="benefits-outlook-label">Retirement Magnitude (Approximate)</div>
+                        <div class="benefits-outlook-value">
+                          Federal: steadier baseline. Private: wider variability.
+                        </div>
+                      </div>
+                      <div class="benefits-outlook-row">
+                        <div class="benefits-outlook-label">Stability vs Upside signal</div>
+                        <div class="benefits-outlook-value">Federal stability ▲ · Private upside ▲</div>
+                      </div>
+                      <div class="benefits-outlook-row">
+                        <div class="benefits-outlook-label">Confidence bands</div>
+                        <div class="benefits-outlook-value">High · Medium · Low</div>
+                      </div>
+                    </div>
+                    <div class="privacy-card-mask" data-privacy-mask hidden>
+                      Details hidden. Toggle to view.
+                    </div>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">How this outlook was formed</div>
+                    <ul class="benefits-list">
+                      <li>Compared structural layers across pay and benefits.</li>
+                      <li>Used typical ranges, not precise offers.</li>
+                      <li>Mapped failure modes to stability signals.</li>
+                    </ul>
+                  </div>
+                  <div class="benefits-card">
+                    <div class="benefits-card-title">PathAdvisor statement</div>
+                    <p class="benefits-card-copy">
+                      This is a defensible synthesis of structures, not a prediction.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="profile-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Profile context</div>
+              <h1>Profile</h1>
+              <p>Set the background PathAdvisor uses to tailor guidance.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="workspace-scaffold">
+              <div class="workspace-scaffold-header">
+                <div class="workspace-scaffold-title">Profile essentials</div>
+                <div class="workspace-scaffold-meta">0 fields captured</div>
+              </div>
+              <div class="workspace-scaffold-card">
+                <div class="workspace-scaffold-label">Focus areas</div>
+                <ul class="workspace-scaffold-list">
+                  <li>Target roles and grade levels.</li>
+                  <li>Preferred locations or agencies.</li>
+                  <li>Availability and clearance status.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="settings-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">Workspace</div>
+              <h1>Settings</h1>
+              <p>Control preferences, data, and navigation defaults.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="workspace-scaffold">
+              <div class="workspace-scaffold-header">
+                <div class="workspace-scaffold-title">Workspace settings</div>
+                <div class="workspace-scaffold-meta">Defaults</div>
+              </div>
+              <div class="workspace-scaffold-card">
+                <div class="workspace-scaffold-label">Adjust</div>
+                <ul class="workspace-scaffold-list">
+                  <li>Default landing workspace.</li>
+                  <li>Notification and focus preferences.</li>
+                  <li>Local data reset actions.</li>
+                </ul>
+              </div>
+              <div class="workspace-scaffold-card settings-card">
+                <div class="settings-card-header">
+                  <div>
+                    <div class="workspace-scaffold-title">PathAdvisor Scout Mode</div>
+                    <div class="workspace-scaffold-meta">
+                      Background scouting for timely guidance.
+                    </div>
+                  </div>
+                  <label class="settings-toggle">
+                    <span>Scout Mode</span>
+                    <input type="checkbox" disabled />
+                  </label>
+                </div>
+                <div class="settings-controls">
+                  <label class="settings-control">
+                    <span>Check frequency</span>
+                    <select disabled>
+                      <option>Every 12 hours</option>
+                    </select>
+                  </label>
+                  <label class="settings-control">
+                    <span>Quiet hours</span>
+                    <select disabled>
+                      <option>10:00 PM – 7:00 AM</option>
+                    </select>
+                  </label>
+                  <label class="settings-control">
+                    <span>Notification threshold</span>
+                    <select disabled>
+                      <option>Only strong matches</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="alert-center-view" class="workspace-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">PathAdvisor</div>
+              <h1>Alert Center</h1>
+              <p>Signals from your scout, analyst, and decision support.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="workbench-surface">
+            <div class="workspace-scaffold">
+              <div class="workspace-scaffold-header">
+                <div class="workspace-scaffold-title">Alert stream</div>
+                <div class="workspace-scaffold-meta">PathAdvisor Scout Mode</div>
+              </div>
+              <div class="workspace-scaffold-card alert-empty">
+                <div class="workspace-scaffold-label">No alerts yet</div>
+                <p class="workspace-placeholder">
+                  When PathAdvisor finds something worth your attention, it will
+                  appear here with a clear next step.
+                </p>
+              </div>
+              <div class="workspace-scaffold-card">
+                <div class="workspace-scaffold-label">Sample alerts</div>
+                <div class="alert-card">
+                  <div class="alert-title">Is this role realistic for you?</div>
+                  <p class="alert-body">
+                    The role aligns with your target skills but has a gap in one
+                    required tool. PathAdvisor can outline a quick prep plan.
+                  </p>
+                </div>
+                <div class="alert-card">
+                  <div class="alert-title">Should you apply?</div>
+                  <p class="alert-body">
+                    This opportunity matches your location and timeline with a
+                    strong overlap in experience bullets.
+                  </p>
+                </div>
+                <div class="alert-card">
+                  <div class="alert-title">Is this a career accelerator?</div>
+                  <p class="alert-body">
+                    The promotion path looks strong. PathAdvisor can compare it
+                    to private-sector growth options.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="conversations-view" class="workspace-view conversations-view" hidden>
+          <header class="workbench-header">
+            <div>
+              <div class="workbench-eyebrow">PathAdvisor</div>
+              <h1>Conversations</h1>
+              <p>Pick up where you left off or start a new thread.</p>
+            </div>
+            <div class="workbench-header-actions">
+            </div>
+          </header>
+          <div class="conversations-body">
+            <section class="conversations-list-panel">
+              <div class="conversations-toolbar">
+                <button id="conversation-new" class="advisor-action-button" type="button">
+                  New conversation
+                </button>
+                <input
+                  id="conversation-search"
+                  class="conversations-search"
+                  type="search"
+                  placeholder="Search conversations"
+                />
+              </div>
+              <div id="conversation-list" class="conversations-list"></div>
+              <div id="conversation-empty" class="conversations-empty" hidden>
+                No conversations match this search.
+              </div>
+            </section>
+            <section class="conversations-detail-panel">
+              <div class="conversations-detail-card">
+                <div id="conversation-detail-title" class="conversations-detail-title"></div>
+                <div id="conversation-detail-meta" class="conversations-detail-meta"></div>
+              <div class="conversations-detail-actions">
+                <button
+                  id="conversation-clear-thread"
+                  class="advisor-action-button"
+                  type="button"
+                >
+                  Clear
+                </button>
+                <button
+                  id="conversation-export-thread"
+                  class="advisor-action-button"
+                  type="button"
+                >
+                  Export
+                </button>
+              </div>
+                <button
+                  id="conversation-open-pathadvisor"
+                  class="advisor-action-button is-primary"
+                  type="button"
+                >
+                  Open in PathAdvisor
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+      <div
+        class="activity-tray-container is-collapsed activity-tray--collapsed"
+        data-activity-tray
+        data-collapsed="true"
+      >
+        <section class="activity-log is-collapsed" data-collapsed="true">
+          <header class="activity-header">
+            <div class="activity-header-title">
+              <div class="activity-title-row">
+                <h3>Recent Activity</h3>
+                <span class="activity-unread-badge is-hidden" data-activity-unread-badge>
+                  0
+                </span>
+              </div>
+              <span class="activity-header-subtitle">Recent workspace events and selections</span>
+            </div>
+            <button class="activity-toggle" type="button">
+              <span>Expand</span>
+              <span
+                class="activity-unread-badge is-hidden"
+                data-activity-unread-badge-compact
+              >
+                0
+              </span>
+            </button>
+          </header>
+          <div class="activity-confirmation" data-activity-confirmation hidden></div>
+          <div class="activity-compact" data-activity-compact></div>
+          <div class="activity-collapsed-state" data-activity-collapsed-state>
+            <div class="activity-collapsed-card">
+              <div class="activity-collapsed-title">Recent Activity hidden</div>
+              <div class="activity-collapsed-body">
+                Expand to review your latest job selections and workspace updates.
+              </div>
+              <button
+                class="activity-collapsed-button"
+                type="button"
+                data-activity-collapsed-expand
+              >
+                Expand
+              </button>
+            </div>
+          </div>
+          <div class="activity-body" data-activity-body>
+            <div class="activity-section">
+              <div class="activity-section-header">
+                <div>
+                  <div class="activity-section-title">Recent Job Selections</div>
+                  <div class="activity-section-subtitle">
+                    Jobs you chose in Job Search or USAJOBS.
+                  </div>
+                </div>
+              </div>
+              <ul class="activity-list" data-activity-recent-list></ul>
+              <div class="activity-empty" data-activity-recent-empty hidden>
+                Select a job to start tracking recent selections.
+              </div>
+            </div>
+            <div class="activity-section">
+              <div class="activity-section-header">
+                <div>
+                  <div class="activity-section-title">Workspace updates</div>
+                  <div class="activity-section-subtitle">
+                    Renderer status and local-only events.
+                  </div>
+                </div>
+              </div>
+              <ul class="activity-list" data-activity-system-list></ul>
+              <div class="activity-empty" data-activity-system-empty hidden>
+                No workspace updates yet.
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      </div>
+
+      <!-- Day 65: PathAdvisor Sidebar v2 – Idle Compact default; Show guidance toggles expanded. -->
+      <aside id="pathadvisor-rail" class="advisor-rail advisor-rail--full-height" data-live-surface="sidebar">
+        <header class="advisor-header advisor-header-thin">
+          <div class="advisor-header-text">
+            <h2 class="advisor-title">PathAdvisor</h2>
+            <p class="advisor-subtext">Local-first. Private by default.</p>
+          </div>
+          <div class="advisor-header-icons">
+            <button
+              class="advisor-icon-btn"
+              type="button"
+              data-privacy-toggle
+              data-selected-job-privacy-toggle
+              title="Privacy"
+              aria-label="Privacy"
+              aria-pressed="false"
+            ><span class="advisor-icon-symbol" aria-hidden="true">&#x1F441;</span></button>
+            <button
+              class="advisor-icon-btn"
+              type="button"
+              data-conversation-clear
+              title="Clear"
+              aria-label="Clear conversation"
+            ><span class="advisor-icon-symbol" aria-hidden="true">&#x00D7;</span></button>
+          </div>
+          <!-- Hidden refs for renderer: New, Export (optional use). -->
+          <button type="button" data-conversation-new hidden aria-hidden="true"></button>
+          <button type="button" data-conversation-export hidden aria-hidden="true"></button>
+        </header>
+        <div class="advisor-body">
+          <!-- B) Context capsule card (always visible). -->
+          <div class="advisor-context-capsule" data-advisor-privacy-card>
+            <div class="advisor-context-row">
+              <span class="advisor-context-label">Target Job</span>
+              <span class="advisor-guidance-title" data-selected-job-title>None selected</span>
+            </div>
+            <div class="advisor-context-row">
+              <span class="advisor-context-label">Readiness</span>
+              <span class="advisor-context-value" data-advisor-readiness>—</span>
+            </div>
+            <a href="#" class="advisor-context-action" data-advisor-set-target>Set target &gt;</a>
+            <p class="advisor-context-next" data-advisor-next-instruction>
+              Next: Pick a target job to get a readiness score.
+            </p>
+            <span data-advisor-observation hidden aria-hidden="true"></span>
+            <div class="advisor-context-meta" hidden>
+              <div class="advisor-microcopy" data-selected-job-summary></div>
+              <div class="advisor-microcopy" data-selected-job-meta></div>
+              <div class="advisor-microcopy" data-selected-job-source></div>
+            </div>
+            <button type="button" data-selected-job-clear class="advisor-action-button is-ghost" hidden aria-hidden="true"></button>
+          </div>
+          <!-- Idle-only: primary CTA + Show guidance link (visible when data-pathadvisor-ui="idle"). -->
+          <div class="advisor-idle-cta" data-advisor-idle-cta>
+            <button class="advisor-cta-primary" type="button" data-advisor-cta-choose-job-idle>
+              Choose a Target Job
+            </button>
+            <span class="advisor-show-guidance-link">Guidance active</span>
+          </div>
+          <!-- Expanded-only: guidance card, Suggested prompts, Details (visible when data-pathadvisor-ui="expanded"). -->
+          <div class="advisor-expanded-only">
+          <!-- C) What to do next card (one short sentence, CTA, collapsed Why this?). -->
+          <div class="advisor-guidance-card advisor-guidance-primary">
+            <h3 class="advisor-guidance-card-title">What to do next</h3>
+            <p class="advisor-guidance-sentence">Select a target job from your list below to analyze requirements and get your readiness score.</p>
+            <button class="advisor-cta-primary" type="button" data-advisor-cta-choose-job">
+              Choose a Target Job
+            </button>
+            <button
+              class="advisor-disclosure-toggle"
+              type="button"
+              data-advisor-why-disclosure
+              aria-expanded="false"
+            >
+              &gt; Why this?
+            </button>
+            <div class="advisor-why-content" hidden data-advisor-why-content>
+              <p>Setting a target job focuses readiness and guidance on that role.</p>
+            </div>
+          </div>
+          <!-- D) Suggested prompts (collapsed by default). -->
+          <div class="advisor-collapse-section" data-advisor-suggested-prompts>
+            <button
+              class="advisor-collapse-header"
+              type="button"
+              data-advisor-suggested-prompts-toggle
+              aria-expanded="false"
+            >
+              <span>&gt; Suggested prompts</span>
+            </button>
+            <div class="advisor-collapse-body" hidden data-advisor-suggested-prompts-body>
+              <div class="advisor-prompt-pills">
+                <button class="advisor-pill" type="button" data-intent="explain-page">Summarize this role</button>
+                <button class="advisor-pill" type="button" data-intent="qualified">Compare to my target grade</button>
+                <button class="advisor-pill" type="button" data-intent="prepare-next">Draft a follow-up plan</button>
+              </div>
+            </div>
+          </div>
+          <!-- E) Details (collapsed by default). -->
+          <div class="advisor-collapse-section" data-advisor-details>
+            <button
+              class="advisor-collapse-header"
+              type="button"
+              data-advisor-details-toggle
+              aria-expanded="false"
+            >
+              <span>&gt; Details</span>
+            </button>
+            <div class="advisor-collapse-body" hidden data-advisor-details-body>
+              <div class="advisor-details-content">
+                <h4 class="advisor-details-heading">How scoring works</h4>
+                <p>PathOS analyzes job announcements and compares required qualifications to your resume content, highlighting gaps in specialized experience, education, or certifications.</p>
+                <h4 class="advisor-details-heading">What PathOS can&rsquo;t control</h4>
+                <p>Final hiring decisions depend on agency review, veterans&rsquo; preference, and other factors outside resume analysis. PathOS helps you prepare, not guarantee selection.</p>
+                <h4 class="advisor-details-heading">Data &amp; privacy</h4>
+                <p>All analysis runs locally on your device. Your resume and job data stay private unless you choose to share them.</p>
+              </div>
+            </div>
+          </div>
+          </div>
+          <!-- Calculator and Explore modes: v2 does not show Tool Guidance; gate behind advisor-v2-hidden. -->
+          <div class="advisor-section advisor-guidance advisor-v2-hidden" data-advisor-mode="calculator" hidden>
+            <div class="advisor-label">Tool guidance</div>
+            <div class="advisor-guidance-card">
+              <div class="advisor-guidance-title" data-benefits-guidance-title>PathAdvisor</div>
+              <ul class="advisor-guidance-list" data-benefits-guidance-list>
+                <li>Open a tool to see guided statements here.</li>
+              </ul>
+            </div>
+            <div class="advisor-trust">External tools open in a separate window for reference only.</div>
+          </div>
+          <div class="advisor-section advisor-explore advisor-v2-hidden" data-advisor-mode="explore" hidden>
+            <div class="advisor-label">PathAdvisor</div>
+            <div class="advisor-guidance-card">
+              <div class="advisor-guidance-title" data-explore-advisor-summary>Share a prompt to see a focused PathAdvisor snapshot.</div>
+              <div class="advisor-guidance-section">
+                <div class="advisor-guidance-title">Selection Reasoning</div>
+                <ul class="advisor-guidance-list">
+                  <li><strong>Promotion trajectory:</strong> <span data-explore-advisor-reason="promotion">Provide your promotion timeline to see targeted signals.</span></li>
+                  <li><strong>Qualification proximity:</strong> <span data-explore-advisor-reason="qualification">The prompt helps align series, grade, and experience fit.</span></li>
+                  <li><strong>Location flexibility:</strong> <span data-explore-advisor-reason="location">We adjust match logic based on relocation and remote openness.</span></li>
+                  <li><strong>Benefits impact:</strong> <span data-explore-advisor-reason="benefits">Benefits signals remain directional at this stage.</span></li>
+                </ul>
+              </div>
+              <div class="advisor-trust">PathOS provides decision support and reasoning. All position data, application processes, and official details are managed through USAJOBS.gov.</div>
+              <button class="advisor-action-button" type="button">Refine my search criteria</button>
+            </div>
+          </div>
+          <!-- Day 65 Conversation mode: context bar + message area + multiline composer (visible when data-pathadvisor-ui="chat"). -->
+          <div class="advisor-chat-block advisor--chat-only" data-pathos-anchor="advisor-chat-block">
+            <div class="advisor-context-bar" data-pathos-anchor="advisor-context-bar">
+              <span>Target: <span data-advisor-chat-target-job>None</span></span>
+              <span>|</span>
+              <span>Readiness: <span data-advisor-chat-readiness>—</span></span>
+              <a href="#" class="advisor-context-bar-change" data-advisor-chat-change>Change</a>
+            </div>
+            <div class="advisor-chat-messages" data-pathos-anchor="advisor-chat-messages">
+              <div id="briefing-feed" class="briefing-feed" role="list"></div>
+              <button class="jump-latest" type="button" data-jump-latest hidden>Jump to latest</button>
+              <div id="briefing-empty" class="briefing-empty">Start typing to chat with PathAdvisor.</div>
+            </div>
+            <div class="advisor-chat-composer-wrap" data-pathos-anchor="advisor-chat-composer-wrap">
+              <form id="followup-form-chat" class="advisor-input advisor-input-chat" data-live-followup-form data-advisor-chat-form>
+                <textarea
+                  id="followup-input-chat"
+                  placeholder="Ask about your target job, resume, specialized experience, or readiness score…"
+                  rows="3"
+                  data-live-followup-input
+                  data-advisor-chat-input
+                ></textarea>
+                <button class="send-button" type="submit" aria-label="Send">Send</button>
+              </form>
+            </div>
+          </div>
+          <!-- Live stack: minimal input only in Guidance mode (feed lives in advisor-chat-block for Conversation mode). -->
+          <div class="advisor-live-stack" data-advisor-mode="live">
+            <!-- F) Bottom input bar (minimal) – visible in Guidance only. -->
+            <div class="advisor-section advisor-input-section">
+              <form id="followup-form" class="advisor-input advisor-input-minimal" data-live-followup-form data-advisor-guidance-form>
+                <textarea
+                  id="followup-input"
+                  placeholder="Ask about your target job, resume, or score…"
+                  rows="2"
+                  data-live-followup-input
+                ></textarea>
+                <button class="send-button" type="submit" aria-label="Send">Send</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="resume-export-toast" data-resume-export-toast hidden></div>
+    </div>
+    <section
+      id="decision-overlay"
+      class="decision-overlay"
+      data-feature="decision-mode"
+      hidden
+    >
+      <div class="decision-panel">
+        <header class="decision-header">
+          <div>
+            <div class="decision-eyebrow">Decision Mode</div>
+            <h2 class="decision-title">Decision Workspace</h2>
+            <p>Structured reasoning for tradeoffs and next steps.</p>
+          </div>
+          <div class="decision-actions">
+            <button
+              id="decision-detach"
+              class="decision-button is-primary"
+              type="button"
+            >
+              Detach Decision View
+            </button>
+            <button
+              id="decision-close"
+              class="decision-button"
+              type="button"
+            >
+              Return to browsing
+            </button>
+          </div>
+        </header>
+        <div class="decision-microcopy">
+          Open this analysis in a focused workspace.
+        </div>
+        <div class="decision-form" data-decision-surface="overlay">
+          <label class="decision-label" for="decision-title">
+            Decision title
+          </label>
+          <input
+            id="decision-title"
+            class="decision-input"
+            type="text"
+            placeholder="Untitled Decision"
+            data-decision-field="title"
+          />
+          <div class="decision-section">
+            <div class="decision-label">Context</div>
+            <textarea
+              class="decision-textarea"
+              rows="4"
+              placeholder="Capture the situation, goals, and constraints."
+              data-decision-field="context"
+            ></textarea>
+          </div>
+          <div class="decision-section">
+            <div class="decision-label">Key Factors</div>
+            <textarea
+              class="decision-textarea"
+              rows="4"
+              placeholder="List the criteria that matter most."
+              data-decision-field="keyFactors"
+            ></textarea>
+          </div>
+          <div class="decision-section">
+            <div class="decision-label">Tradeoffs</div>
+            <textarea
+              class="decision-textarea"
+              rows="4"
+              placeholder="Note the pros, cons, and risks to weigh."
+              data-decision-field="tradeoffs"
+            ></textarea>
+          </div>
+          <div class="decision-section">
+            <div class="decision-label">Recommendation</div>
+            <textarea
+              class="decision-textarea"
+              rows="4"
+              placeholder="Draft a clear recommendation."
+              data-decision-field="recommendation"
+            ></textarea>
+          </div>
+          <div class="decision-section">
+            <div class="decision-label">Next Steps</div>
+            <textarea
+              class="decision-textarea"
+              rows="4"
+              placeholder="Outline immediate actions and owners."
+              data-decision-field="nextSteps"
+            ></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section
+      id="live-advisor-window"
+      class="detached-shell"
+      hidden
+      data-live-surface="window"
+    >
+      <header class="detached-header">
+        <div>
+          <div class="detached-eyebrow">PathAdvisor</div>
+          <h1>Live Advisor</h1>
+          <p>Chat companion for real-time guidance while you browse.</p>
+        </div>
+        <div class="detached-header-actions">
+          <div class="advisor-conversation-controls">
+            <button class="advisor-action-button" type="button" data-conversation-new>
+              New
+            </button>
+            <button class="advisor-action-button" type="button" data-conversation-clear>
+              Clear
+            </button>
+            <button class="advisor-action-button" type="button" data-conversation-export>
+              Export
+            </button>
+          </div>
+          <div class="advisor-quick-actions" data-quick-actions>
+            <button
+              class="advisor-action-button"
+              type="button"
+              aria-expanded="false"
+              data-quick-actions-toggle
+            >
+              Quick actions
+            </button>
+            <div
+              class="quick-actions-panel"
+              role="dialog"
+              aria-label="Quick actions"
+              hidden
+              data-quick-actions-panel
+            >
+              <div class="quick-actions-header">
+                <div class="advisor-label">Suggested prompts</div>
+                <button
+                  class="advisor-action-button is-ghost"
+                  type="button"
+                  data-quick-actions-close
+                >
+                  Close
+                </button>
+              </div>
+              <div class="chip-row">
+                <button class="chip" type="button" data-intent="explain-page">
+                  Summarize this role
+                </button>
+                <button class="chip" type="button" data-intent="qualified">
+                  Compare to my target grade
+                </button>
+                <button class="chip" type="button" data-intent="prepare-next">
+                  Draft a follow-up plan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div class="detached-content">
+        <div class="advisor-section advisor-job-context">
+          <div class="advisor-label">Current job context</div>
+          <div
+            class="advisor-guidance-card privacy-card"
+            data-privacy-card
+            data-advisor-privacy-card
+          >
+            <div class="privacy-card-header">
+              <div class="advisor-guidance-title" data-selected-job-title>
+                No job selected yet
+              </div>
+              <div>
+                <button
+                  class="privacy-toggle"
+                  type="button"
+                  data-privacy-toggle
+                  data-selected-job-privacy-toggle
+                  aria-pressed="false"
+                >
+                  Hide details
+                </button>
+                <button
+                  class="advisor-action-button is-ghost"
+                  type="button"
+                  data-selected-job-clear
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div class="privacy-card-body" data-privacy-body>
+              <div class="advisor-microcopy" data-selected-job-summary>
+                No job selected yet.
+              </div>
+              <div class="advisor-microcopy" data-selected-job-meta></div>
+              <div class="advisor-microcopy" data-selected-job-source></div>
+            </div>
+            <div class="privacy-card-mask" data-privacy-mask hidden>
+              Details hidden. Toggle to view.
+            </div>
+          </div>
+        </div>
+        <div class="advisor-section advisor-conversation">
+          <div class="advisor-label">Conversation</div>
+          <div class="briefing-feed" role="list"></div>
+          <button class="jump-latest" type="button" data-jump-latest hidden>
+            Jump to latest
+          </button>
+          <div class="briefing-empty">
+            Start typing to chat with PathAdvisor.
+          </div>
+        </div>
+        <div class="advisor-section advisor-input-section">
+          <label class="advisor-label" for="live-followup-input">Send a message</label>
+          <form class="advisor-input" data-live-followup-form>
+            <textarea
+              id="live-followup-input"
+              placeholder="Ask a question, paste a requirement, or request a quick comparison."
+              rows="2"
+              data-live-followup-input
+            ></textarea>
+            <button class="send-button" type="submit">Send</button>
+          </form>
+          <div class="advisor-note">
+            Local, read-only guidance. No automation.
+          </div>
+          <div class="advisor-trust">
+            You're viewing external sources inside PathOS. PathOS does not access your data.
+          </div>
+        </div>
+      </div>
+    </section>
+    <section
+      id="decision-view-window"
+      class="detached-shell"
+      data-feature="decision-mode"
+      hidden
+    >
+      <header class="decision-window-header">
+        <div>
+          <div class="decision-eyebrow">Decision View</div>
+          <input
+            class="decision-title-input"
+            type="text"
+            placeholder="Untitled Decision"
+            data-decision-field="title"
+          />
+        </div>
+        <div class="decision-actions">
+          <button
+            id="decision-reattach"
+            class="decision-button is-primary"
+            type="button"
+          >
+            Reattach to App
+          </button>
+          <button
+            id="decision-copy-summary"
+            class="decision-button"
+            type="button"
+          >
+            Copy Summary
+          </button>
+          <button
+            id="decision-close-window"
+            class="decision-button"
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+      </header>
+      <div class="decision-form decision-window-body" data-decision-surface="window">
+        <div class="decision-section">
+          <div class="decision-label">Context</div>
+          <textarea
+            class="decision-textarea"
+            rows="4"
+            placeholder="Capture the situation, goals, and constraints."
+            data-decision-field="context"
+          ></textarea>
+        </div>
+        <div class="decision-section">
+          <div class="decision-label">Key Factors</div>
+          <textarea
+            class="decision-textarea"
+            rows="4"
+            placeholder="List the criteria that matter most."
+            data-decision-field="keyFactors"
+          ></textarea>
+        </div>
+        <div class="decision-section">
+          <div class="decision-label">Tradeoffs</div>
+          <textarea
+            class="decision-textarea"
+            rows="4"
+            placeholder="Note the pros, cons, and risks to weigh."
+            data-decision-field="tradeoffs"
+          ></textarea>
+        </div>
+        <div class="decision-section">
+          <div class="decision-label">Recommendation</div>
+          <textarea
+            class="decision-textarea"
+            rows="4"
+            placeholder="Draft a clear recommendation."
+            data-decision-field="recommendation"
+          ></textarea>
+        </div>
+        <div class="decision-section">
+          <div class="decision-label">Next Steps</div>
+          <textarea
+            class="decision-textarea"
+            rows="4"
+            placeholder="Outline immediate actions and owners."
+            data-decision-field="nextSteps"
+          ></textarea>
+        </div>
+      </div>
+    </section>
+    <script src="./embedded-bar.js"></script>
+    <script src="./focus-mode.js"></script>
+    <script src="./conversation-store.js"></script>
+    <script src="./resume-career-store.js"></script>
+    <script src="./active-job-context.js"></script>
+    <script src="./selected-job-store.js"></script>
+    <script src="./job-selection-store.js"></script>
+    <script src="./benefits-tools.js"></script>
+    <script src="./explore-pathos.js"></script>
+    <script src="./lib/usajobs-helpers.js"></script>
+    <script src="./renderer-diagnostics.js"></script>
+    <script type="module" src="./bootstrap/renderer-bootstrap.js"></script>
+  </body>
+</html>

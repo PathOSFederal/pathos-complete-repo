@@ -1,0 +1,31 @@
+{
+  "profile": {
+    "user_id": "user-needs-info",
+    "years_experience": 4,
+    "target_roles": ["Data Analyst"],
+    "skills": ["Python", "SQL"],
+    "preferred_locations": ["Chicago, IL"],
+    "authorized_to_work": true
+  },
+  "job": {
+    "job_id": "job-needs-info",
+    "title": "Backend Engineer",
+    "company": "Northstar",
+    "location": {
+      "city": "Boston",
+      "region": "MA",
+      "country": "US",
+      "remote": false
+    },
+    "grade_range": {
+      "min_grade": 4,
+      "max_grade": 6
+    },
+    "posting_dates": {
+      "posted_date": "2026-02-03",
+      "closes_date": "2026-03-03"
+    },
+    "source_url": "https://example.com/jobs/job-needs-info"
+  },
+  "user_notes": "Open to adjacent roles."
+}

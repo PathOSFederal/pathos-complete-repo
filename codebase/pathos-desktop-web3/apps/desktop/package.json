@@ -1,0 +1,45 @@
+{
+  "name": "@pathos/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "PathOS Desktop -- Electron + Vite + React renderer (shared UI from @pathos/ui)",
+  "main": "dist/electron/main.cjs",
+  "scripts": {
+    "dev:renderer": "vite",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:electron:dev": "tsc -p electron/tsconfig.json",
+    "dev:electron": "wait-on tcp:5173 && pnpm build:electron:dev && node scripts/copy-preload.cjs && electron .",
+    "dev": "concurrently \"pnpm dev:renderer\" \"pnpm dev:electron\"",
+    "build": "pnpm build:renderer && pnpm build:electron && node scripts/copy-preload.cjs",
+    "package": "pnpm build && electron-builder --config electron-builder.yml",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/postinstall-electron.cjs"
+  },
+  "dependencies": {
+    "@pathos/core": "workspace:*",
+    "@pathos/adapters": "workspace:*",
+    "@pathos/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "lucide-react": "^0.511.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.3.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "electron": "^40.0.0",
+    "electron-builder": "^25.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.0"
+  }
+}

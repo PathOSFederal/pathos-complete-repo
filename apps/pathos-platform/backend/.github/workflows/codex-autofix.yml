@@ -1,0 +1,125 @@
+name: Codex Autofix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  codex-autofix:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'develop' && github.event.workflow_run.repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout failed revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Poetry
+        run: python -m pip install --upgrade pip poetry
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Run quality gates and capture failure logs
+        id: initial_gates
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          : > artifacts/ci-failure-log.txt
+
+          set +e
+          poetry run ruff check . > artifacts/ruff.log 2>&1
+          RUFF_EXIT=$?
+          poetry run mypy . > artifacts/mypy.log 2>&1
+          MYPY_EXIT=$?
+          poetry run pytest -q > artifacts/pytest.log 2>&1
+          PYTEST_EXIT=$?
+          set -e
+
+          {
+            echo "=== ruff (exit=${RUFF_EXIT}) ==="
+            cat artifacts/ruff.log
+            echo
+            echo "=== mypy (exit=${MYPY_EXIT}) ==="
+            cat artifacts/mypy.log
+            echo
+            echo "=== pytest (exit=${PYTEST_EXIT}) ==="
+            cat artifacts/pytest.log
+          } >> artifacts/ci-failure-log.txt
+
+          echo "ruff_exit=${RUFF_EXIT}" >> "$GITHUB_OUTPUT"
+          echo "mypy_exit=${MYPY_EXIT}" >> "$GITHUB_OUTPUT"
+          echo "pytest_exit=${PYTEST_EXIT}" >> "$GITHUB_OUTPUT"
+
+          if [ "$RUFF_EXIT" -eq 0 ] && [ "$MYPY_EXIT" -eq 0 ] && [ "$PYTEST_EXIT" -eq 0 ]; then
+            echo "all_passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "all_passed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build changed files context
+        if: steps.initial_gates.outputs.all_passed != 'true'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            git diff --name-status HEAD~1...HEAD > artifacts/changed-files.txt || true
+          fi
+          if [ ! -s artifacts/changed-files.txt ]; then
+            git status --short > artifacts/changed-files.txt
+          fi
+
+      - name: Generate autofix patch from OpenAI
+        if: steps.initial_gates.outputs.all_passed != 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python scripts/ci_ai/autofix_patch.py \
+            --changed-files artifacts/changed-files.txt \
+            --failure-log artifacts/ci-failure-log.txt \
+            --output-patch artifacts/ai-autofix.patch \
+            --openai-api-key "$OPENAI_API_KEY"
+
+      - name: Apply generated patch
+        if: steps.initial_gates.outputs.all_passed != 'true'
+        shell: bash
+        run: |
+          test -s artifacts/ai-autofix.patch
+          git apply --check artifacts/ai-autofix.patch
+          git apply artifacts/ai-autofix.patch
+
+      - name: Re-run quality gates after patch
+        if: steps.initial_gates.outputs.all_passed != 'true'
+        run: |
+          poetry run ruff check .
+          poetry run mypy .
+          poetry run pytest -q
+
+      - name: Create autofix PR
+        if: steps.initial_gates.outputs.all_passed != 'true' && success()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.CODEX_PR_TOKEN }}
+          base: develop
+          branch: codex/autofix-${{ github.run_id }}
+          title: Autofix: CI failure on develop
+          body: |
+            This PR is an automated Codex proposal created after a failed `CI` run on `develop`.
+
+            Safety constraints used:
+            - Fix only what was required for `ruff`, `mypy`, `pytest`, and coverage gates.
+            - Keep diffs minimal.
+            - Preserve deterministic behavior, error contracts, and requestId traceability.
+
+            Human review is required before merge.
+          commit-message: "chore: codex autofix for CI failure"

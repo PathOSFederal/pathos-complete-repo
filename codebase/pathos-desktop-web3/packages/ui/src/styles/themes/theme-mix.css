@@ -1,0 +1,60 @@
+/**
+ * ============================================================================
+ * PATHOS MIX THEME TOKENS
+ * ============================================================================
+ *
+ * Current "new" look: blue surfaces with orange accents.
+ */
+
+[data-theme='mix'] {
+  /* ---- Background & surfaces ---- */
+  --p-bg:           #0f172a;
+  --p-bg-gradient:  linear-gradient(180deg, #0f172a 0%, #172554 100%);
+  --p-surface:      #172554;
+  --p-surface2:     #1e293b;
+
+  /* ---- Borders & separators ---- */
+  --p-border:       #334155;
+  --p-border-strong: #475569;
+  --p-border-light: #64748b;
+
+  /* ---- Text ---- */
+  --p-text:         #e2e8f0;
+  --p-text-muted:   #cbd5e1;
+  --p-text-dim:     #94a3b8;
+
+  /* ---- Typography ---- */
+  --p-font-size-page-title: 1.5rem;
+  --p-font-size-section:    0.8125rem;
+  --p-font-size-body:       0.8125rem;
+  --p-letter-spacing-section: 0.05em;
+
+  /* ---- Accent ---- */
+  --p-accent:       #d97706;
+  --p-accent-muted: #92400e;
+  --p-accent-bg:    rgba(217, 119, 6, 0.10);
+  --p-accent-text:  #fbbf24;
+
+  /* ---- Semantics ---- */
+  --p-success:      #22c55e;
+  --p-success-bg:   rgba(34, 197, 94, 0.10);
+  --p-warning:      #eab308;
+  --p-warning-bg:   rgba(234, 179, 8, 0.10);
+  --p-danger:       #ef4444;
+  --p-danger-bg:    rgba(239, 68, 68, 0.10);
+  --p-info:         #3b82f6;
+  --p-info-bg:      rgba(59, 130, 246, 0.10);
+
+  /* ---- Geometry ---- */
+  --p-radius:       0.5rem;
+  --p-radius-lg:    0.625rem;
+
+  /* ---- Elevation ---- */
+  --p-shadow:               0 1px 2px rgba(0, 0, 0, 0.30);
+  --p-shadow-elevation-1:   0 2px 8px rgba(2, 6, 23, 0.28);
+  --p-shadow-elev-1:        var(--p-shadow-elevation-1);
+  --p-shadow-lg:            0 8px 20px rgba(2, 6, 23, 0.35);
+
+  /* ---- Focus ---- */
+  --p-focus-ring:   0 0 0 2px var(--p-accent);
+}

@@ -1,0 +1,31 @@
+{
+  "profile": {
+    "user_id": "user-skip",
+    "years_experience": 7,
+    "target_roles": ["Backend Engineer"],
+    "skills": ["Python", "FastAPI", "SQL", "API"],
+    "preferred_locations": ["Remote"],
+    "authorized_to_work": false
+  },
+  "job": {
+    "job_id": "job-skip",
+    "title": "Backend Engineer",
+    "company": "GlobalTech",
+    "location": {
+      "city": "Seattle",
+      "region": "WA",
+      "country": "US",
+      "remote": true
+    },
+    "grade_range": {
+      "min_grade": 5,
+      "max_grade": 8
+    },
+    "posting_dates": {
+      "posted_date": "2026-02-04",
+      "closes_date": "2026-03-04"
+    },
+    "source_url": "https://example.com/jobs/job-skip"
+  },
+  "user_notes": null
+}

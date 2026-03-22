@@ -1,0 +1,9 @@
+
+> pathos-desktop@0.1.0 typecheck C:\dev\PathOS\codebase\pathos-desktop
+> tsc -b
+
+src/main.js(40,60): error TS2345: Argument of type '"cache"' is not assignable to parameter of type '"userData" | "home" | "appData" | "assets" | "sessionData" | "temp" | "exe" | "module" | "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos" | "recent" | "logs" | "crashDumps"'.
+src/main.js(1372,27): error TS2554: Expected 0 arguments, but got 3.
+src/preload-benefits-popout.js(3,48): error TS6307: File 'C:/dev/PathOS/codebase/pathos-desktop/src/electron-bridge.js' is not listed within the file list of project 'C:/dev/PathOS/codebase/pathos-desktop/tsconfig.preload.json'. Projects must list all files or use an 'include' pattern.
+src/renderer/benefits-popout.js(23,12): error TS2552: Cannot find name 'Electron'. Did you mean 'Selection'?
+ΓÇëELIFECYCLEΓÇë Command failed with exit code 1.

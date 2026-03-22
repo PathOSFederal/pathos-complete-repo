@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alerts</title>
+    <link rel="stylesheet" href="./styles/pathos-web-theme.tokens.css" />
+    <link rel="stylesheet" href="./styles/pathos-theme.css" />
+    <link rel="stylesheet" href="./alerts-popover.css" />
+  </head>
+  <body class="pathos-theme dark">
+    <div class="alerts-popover">
+      <header class="alerts-popover-header">
+        <div>
+          <div class="alerts-popover-title">Smart Alerts</div>
+          <div class="alerts-popover-subtitle">
+            Fresh signals for your job search.
+          </div>
+        </div>
+        <span class="alerts-popover-count" data-alerts-count>0</span>
+      </header>
+      <div class="alerts-popover-list" role="list" data-alerts-list></div>
+      <div class="alerts-popover-footer">
+        <button class="alerts-popover-link" type="button" data-alerts-view-all>
+          View all
+        </button>
+      </div>
+    </div>
+    <script src="./alerts-popover.js"></script>
+  </body>
+</html>

@@ -1,0 +1,650 @@
+{
+  "name": "PathOS Cursor Execution v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pathos-cursor-execution",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "be2a2e3e-bf5c-49f3-83e3-f29027fa0653",
+      "name": "Webhook",
+      "webhookId": "d9f0e144-5742-4ff4-a9cd-9cf6bedf3228"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst normalized = {\n  runId: body.runId ?? \"\",\n  runsRoot: body.runsRoot ?? \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs\",\n};\n\nreturn [{ json: normalized }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "79b18cb4-ba19-4100-a4fc-a647b9ed260c",
+      "name": "Normalize Cursor Packet"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\validate-run-state.ps1\" -RunId \"{{ $(\"Normalize Cursor Packet\").item.json.runId }}\" -RunsRoot \"{{ $(\"Normalize Cursor Packet\").item.json.runsRoot }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "f6d66e15-3947-4d9a-86ef-077ade2c3a7c",
+      "name": "Validate Run State",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a1b20001-0001-0001-0001-000000000001",
+              "leftValue": "={{ JSON.parse($(\"Validate Run State\").item.json.stdout || \"{}\").status || \"\" }}",
+              "rightValue": "valid",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+      "name": "Run Eligible for Cursor?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $(\"Validate Run State\").item.json;\nconst runId = $(\"Normalize Cursor Packet\").item.json.runId;\n\nlet parsed = {};\nconst rawStdout = typeof raw.stdout === \"string\" ? raw.stdout : \"\";\nconst rawStderr = typeof raw.stderr === \"string\" ? raw.stderr : \"\";\nconst rawError = typeof raw.error === \"string\" ? raw.error : \"\";\nconst output = String(rawStdout || rawStderr).trim().replace(/^\\uFEFF/, \"\");\ntry {\n  const i = output.indexOf(\"{\");\n  const j = output.lastIndexOf(\"}\");\n  if (i !== -1 && j > i) {\n    parsed = JSON.parse(output.substring(i, j + 1));\n  }\n} catch (e) {\n  parsed = {};\n}\n\nconst message = parsed.message || \"Run is not eligible for Cursor execution\";\nconst reason = parsed.message || rawError || \"Validation returned an unparseable response\";\n\nreturn [{ json: {\n  status: \"failure\",\n  message: message,\n  runId: runId,\n  reason: reason,\n  runStatus: parsed.runStatus || \"\",\n  reviewStatus: parsed.reviewStatus || \"\",\n  runPath: parsed.runPath || \"\",\n  statusPath: parsed.statusPath || \"\"\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        240
+      ],
+      "id": "b2c3d4e5-f6a7-8901-bcde-f01234567890",
+      "name": "Build Validation Failure Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        240
+      ],
+      "id": "c3d4e5f6-a7b8-9012-cdef-012345678901",
+      "name": "Respond Validation Failure"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $(\"Validate Run State\").item.json;\nconst stdout = typeof raw.stdout === \"string\" ? raw.stdout : \"{}\";\nconst parsed = JSON.parse(stdout);\nparsed.requiresVisualApproval = parsed.requiresVisualApproval === true || parsed.requiresVisualApproval === \"true\";\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "d4e5f6a7-b8c9-0123-defa-123456789012",
+      "name": "Parse Validated Run State"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{ $(\"Parse Validated Run State\").item.json.runId }}\" -RunsRoot \"{{ $(\"Normalize Cursor Packet\").item.json.runsRoot }}\" -NewStatus \"cursor_in_progress\" -ReviewStatus \"pending\" -StatusNote \"Cursor execution started.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "e5f6a7b8-c9d0-1234-efab-234567890123",
+      "name": "Update Status Cursor In Progress",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $(\"Parse Validated Run State\").item.json;\nconst cursorCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\invoke-cursor.ps1\"` +\n  ` -RunId \"${parsed.runId}\"` +\n  ` -RunPath \"${parsed.runPath}\"` +\n  ` -RepoPath \"${parsed.repoPath}\"`;\nreturn [{ json: { ...parsed, cursorCommand } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "f6a7b8c9-d0e1-2345-fabc-345678901234",
+      "name": "Build Cursor Command"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Cursor Command\").item.json.cursorCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "9f4b4b76-fafc-4030-b302-9f693721c18b",
+      "name": "Invoke Cursor",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "abc333b9-269a-4fbe-8ae8-2b47ae8354fc",
+              "leftValue": "={{ $(\"Invoke Cursor\").item.json.exitCode }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "93902066-431d-447b-8ae5-b5c37afb8d0b",
+      "name": "Did Cursor Succeed?"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{ $(\"Parse Validated Run State\").item.json.runId }}\" -RunsRoot \"{{ $(\"Normalize Cursor Packet\").item.json.runsRoot }}\" -NewStatus \"cursor_failed\" -ReviewStatus \"pending\" -StatusNote \"Cursor execution failed.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        240
+      ],
+      "id": "a7b8c9d0-e1f2-3456-abcd-456789012345",
+      "name": "Update Status Cursor Failed",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cursorOutput = $(\"Invoke Cursor\").item.json;\nconst runId = $(\"Parse Validated Run State\").item.json.runId;\n\nreturn [{ json: {\n  status: \"failure\",\n  message: \"Cursor execution failed\",\n  runId: runId,\n  nextStatus: \"cursor_failed\",\n  stdout: String(cursorOutput.stdout || \"\"),\n  stderr: String(cursorOutput.stderr || \"\"),\n  exitCode: cursorOutput.exitCode != null ? String(cursorOutput.exitCode) : \"\"\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        240
+      ],
+      "id": "b8c9d0e1-f2a3-4567-bcde-567890123456",
+      "name": "Build Cursor Failure Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2464,
+        240
+      ],
+      "id": "c9d0e1f2-a3b4-5678-cdef-678901234567",
+      "name": "Respond Cursor Failure"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "836760fd-4ebe-4411-b077-88433eab307f",
+              "leftValue": "={{ $(\"Parse Validated Run State\").item.json.requiresVisualApproval }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        -240
+      ],
+      "id": "f8ab51e8-71da-48f6-bc47-b9b06a2b1c76",
+      "name": "Requires Visual Approval?"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{ $(\"Parse Validated Run State\").item.json.runId }}\" -RunsRoot \"{{ $(\"Normalize Cursor Packet\").item.json.runsRoot }}\" -NewStatus \"awaiting_visual_approval\" -ReviewStatus \"pending\" -StatusNote \"Cursor execution succeeded. Awaiting visual approval.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -400
+      ],
+      "id": "d0e1f2a3-b4c5-6789-defa-789012345678",
+      "name": "Update Status Awaiting Visual Approval",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1f20001-0001-0001-0001-000000000001",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "e1f20001-0001-0001-0001-000000000002",
+              "name": "message",
+              "value": "Cursor execution succeeded. Run requires visual approval.",
+              "type": "string"
+            },
+            {
+              "id": "e1f20001-0001-0001-0001-000000000003",
+              "name": "runId",
+              "value": "={{ $(\"Parse Validated Run State\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "e1f20001-0001-0001-0001-000000000004",
+              "name": "nextStatus",
+              "value": "awaiting_visual_approval",
+              "type": "string"
+            },
+            {
+              "id": "e1f20001-0001-0001-0001-000000000005",
+              "name": "workType",
+              "value": "={{ $(\"Parse Validated Run State\").item.json.workType }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2464,
+        -400
+      ],
+      "id": "e1f2a3b4-c5d6-7890-efab-890123456789",
+      "name": "Build Awaiting Visual Approval Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2688,
+        -400
+      ],
+      "id": "f2a3b4c5-d6e7-8901-fabc-901234567890",
+      "name": "Respond Awaiting Visual Approval"
+    },
+    {
+      "parameters": {
+        "command": "=powershell.exe -ExecutionPolicy Bypass -File \"C:\\dev\\PathOS\\n8n-lab\\scripts\\update-run-status.ps1\" -RunId \"{{ $(\"Parse Validated Run State\").item.json.runId }}\" -RunsRoot \"{{ $(\"Normalize Cursor Packet\").item.json.runsRoot }}\" -NewStatus \"ready_for_codex\" -ReviewStatus \"approved\" -StatusNote \"Cursor execution succeeded. Ready for Codex hardening.\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -80
+      ],
+      "id": "a3b4c5d6-e7f8-9012-abcd-012345678901",
+      "name": "Update Status Ready For Codex",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b4c50001-0001-0001-0001-000000000001",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "b4c50001-0001-0001-0001-000000000002",
+              "name": "message",
+              "value": "Cursor execution succeeded. Run is ready for Codex hardening.",
+              "type": "string"
+            },
+            {
+              "id": "b4c50001-0001-0001-0001-000000000003",
+              "name": "runId",
+              "value": "={{ $(\"Parse Validated Run State\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "b4c50001-0001-0001-0001-000000000004",
+              "name": "nextStatus",
+              "value": "ready_for_codex",
+              "type": "string"
+            },
+            {
+              "id": "b4c50001-0001-0001-0001-000000000005",
+              "name": "workType",
+              "value": "={{ $(\"Parse Validated Run State\").item.json.workType }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2464,
+        -80
+      ],
+      "id": "b4c5d6e7-f8a9-0123-bcde-123456789012",
+      "name": "Build Ready For Codex Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2688,
+        -80
+      ],
+      "id": "c5d6e7f8-a9b0-1234-cdef-234567890123",
+      "name": "Respond Ready For Codex"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Cursor Packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Cursor Packet": {
+      "main": [
+        [
+          {
+            "node": "Validate Run State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Run State": {
+      "main": [
+        [
+          {
+            "node": "Run Eligible for Cursor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Eligible for Cursor?": {
+      "main": [
+        [
+          {
+            "node": "Parse Validated Run State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Validation Failure Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Validation Failure Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Validation Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Validated Run State": {
+      "main": [
+        [
+          {
+            "node": "Update Status Cursor In Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status Cursor In Progress": {
+      "main": [
+        [
+          {
+            "node": "Build Cursor Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Cursor Command": {
+      "main": [
+        [
+          {
+            "node": "Invoke Cursor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke Cursor": {
+      "main": [
+        [
+          {
+            "node": "Did Cursor Succeed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Did Cursor Succeed?": {
+      "main": [
+        [
+          {
+            "node": "Requires Visual Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status Cursor Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status Cursor Failed": {
+      "main": [
+        [
+          {
+            "node": "Build Cursor Failure Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Cursor Failure Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Cursor Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requires Visual Approval?": {
+      "main": [
+        [
+          {
+            "node": "Update Status Awaiting Visual Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status Ready For Codex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status Awaiting Visual Approval": {
+      "main": [
+        [
+          {
+            "node": "Build Awaiting Visual Approval Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Awaiting Visual Approval Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Awaiting Visual Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status Ready For Codex": {
+      "main": [
+        [
+          {
+            "node": "Build Ready For Codex Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ready For Codex Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Ready For Codex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "667d5b82-9b8a-4b41-83a0-bdcc8159ded2",
+  "meta": {
+    "instanceId": "9ea7968f10c04e77807172205598f527a4da78f10b07762341342d9475e38936"
+  },
+  "id": "TAPn5Z3SUiVPhQsL",
+  "tags": []
+}

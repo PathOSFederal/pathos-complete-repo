@@ -1,0 +1,460 @@
+{
+  "name": "PathOS Codex Handoff v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pathos-codex-handoff",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b9c7a104-dccd-41b4-b720-c1fe390a2f47",
+      "name": "Webhook",
+      "webhookId": "1edfd1e6-6760-43a9-9e1e-21ea5a74fa8d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const codexHandoffCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\build-codex-handoff.ps1\"` +\n  ` -RunId \"${$json.runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"`;\n\nconst codexStatusCommand =\n  `powershell.exe -ExecutionPolicy Bypass -File \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\scripts\\\\update-run-status.ps1\"` +\n  ` -RunId \"${$json.runId}\"` +\n  ` -RunsRoot \"${$json.runsRoot}\"` +\n  ` -NewStatus \"codex_handoff_built\"` +\n  ` -ReviewStatus \"approved\"` +\n  ` -StatusNote \"Codex handoff built and ready for hardening.\"`;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      codexHandoffCommand,\n      codexStatusCommand\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4d22e7f1-0027-4f3c-bd28-836a56dee754",
+      "name": "Build Codex Command"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\n\nconst normalized = {\n  runId: body.runId ?? \"\",\n  runsRoot: body.runsRoot ?? \"C:\\\\dev\\\\PathOS\\\\n8n-lab\\\\runs\",\n};\n\nreturn [{ json: normalized }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "c1f5e20b-8255-408d-9bce-8ac9aa5344c6",
+      "name": "Normalize Codex Packet"
+    },
+    {
+      "parameters": {
+        "command": "={{ $(\"Build Codex Command\").item.json.codexHandoffCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "f3e6441f-9af3-4d82-8430-c0cbd2a74bd2",
+      "name": "Build Codex Handoff",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "007cae0e-d840-4cf7-9bdc-0ac38d224da6",
+              "leftValue": "={{$(\"Build Codex Handoff\").item.json.exitCode ?? -1}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        800,
+        0
+      ],
+      "id": "05bdb23b-c251-442d-b767-f7a76b43fc7a",
+      "name": "Check Handoff Build Success"
+    },
+    {
+      "parameters": {
+        "command": "=={{ $(\"Build Codex Command\").item.json.codexStatusCommand }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        -144
+      ],
+      "id": "11324f9f-be93-41f3-8edb-fa66e78f1bae",
+      "name": "Update Run Status",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cadc393c-8ba5-4a56-b845-0f882a877ec1",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "ee26c799-4e4a-4310-8d6c-2cd36d7396cc",
+              "name": "message",
+              "value": "Codex handoff built",
+              "type": "string"
+            },
+            {
+              "id": "92c98aeb-5dbf-48d8-a01f-5f5c98bb4777",
+              "name": "runId",
+              "value": "={{ $(\"Normalize Codex Packet\").item.json.runId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        -240
+      ],
+      "id": "95419bb6-59a2-4b39-967b-69fa9a644ba9",
+      "name": "Codex Handoff Success"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1616,
+        -240
+      ],
+      "id": "5cc17782-8401-42e1-b081-aa8160a3a402",
+      "name": "Respond Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "42fb019f-f500-4300-b599-78912c8feb02",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "f817f352-bdd9-4722-8fa1-6fc78c6fb4aa",
+              "name": "message",
+              "value": "Codex handoff blocked by state guard",
+              "type": "string"
+            },
+            {
+              "id": "b2b183fa-2fd6-4f80-940e-4fe270cb73c6",
+              "name": "runId",
+              "value": "={{ $(\"Normalize Codex Packet\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "7f1efff5-c37c-4b37-8f1b-781952f7e876",
+              "name": "stderr",
+              "value": "={{ $(\"Build Codex Handoff\").item.json.stderr ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "87ce9e77-75e3-4827-9f86-3518513d29d9",
+              "name": "exitCode",
+              "value": "={{ $(\"Build Codex Handoff\").item.json.exitCode ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "957c4368-9f8b-4edc-afa3-f5a52df2da90",
+              "name": "stdout",
+              "value": "={{ $(\"Build Codex Handoff\").item.json.stdout ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        144
+      ],
+      "id": "989218a1-37e7-4b17-951e-80caad95f0b2",
+      "name": "Codex Handoff Build Failure"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1216,
+        144
+      ],
+      "id": "e352a92a-26c6-4673-aa5b-2e03bc261a62",
+      "name": "Respond Build Failure"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "02f13f23-e756-46d6-9166-051b5dbbc00b",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1216,
+        -144
+      ],
+      "id": "2319d9e7-1a91-4b3c-b5ee-5d731ef16d91",
+      "name": "Check Status Update Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6dca461e-14b8-4531-91f2-546f8cb78afb",
+              "name": "status",
+              "value": "failure",
+              "type": "string"
+            },
+            {
+              "id": "54d05c42-6a63-48d6-bcdb-eb316588262d",
+              "name": "message",
+              "value": "Failed to update run status after codex handoff",
+              "type": "string"
+            },
+            {
+              "id": "d52532f1-8c28-4bc8-aca3-ef3d4f6d75e4",
+              "name": "runId",
+              "value": "={{ $(\"Normalize Codex Packet\").item.json.runId }}",
+              "type": "string"
+            },
+            {
+              "id": "8f077c42-95ea-4da6-9ecc-fc00a4c04c98",
+              "name": "exitCode",
+              "value": "={{ $(\"Update Run Status\").item.json.exitCode ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "1eb27a9f-1326-49dd-a6be-364e2e4e1039",
+              "name": "stderr",
+              "value": "={{ $(\"Update Run Status\").item.json.stderr ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        -48
+      ],
+      "id": "43675d86-a9a3-454c-a78e-ac2dc60afeaf",
+      "name": "Codex Handoff Status Failure"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1616,
+        -48
+      ],
+      "id": "0774fb51-c0f8-49bf-8750-5924cec46f80",
+      "name": "Respond Status Failure"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Codex Packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Codex Command": {
+      "main": [
+        [
+          {
+            "node": "Build Codex Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Codex Packet": {
+      "main": [
+        [
+          {
+            "node": "Build Codex Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Codex Handoff": {
+      "main": [
+        [
+          {
+            "node": "Check Handoff Build Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Handoff Build Success": {
+      "main": [
+        [
+          {
+            "node": "Update Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Codex Handoff Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Run Status": {
+      "main": [
+        [
+          {
+            "node": "Check Status Update Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Handoff Success": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Handoff Build Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond Build Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status Update Success": {
+      "main": [
+        [
+          {
+            "node": "Codex Handoff Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Codex Handoff Status Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Codex Handoff Status Failure": {
+      "main": [
+        [
+          {
+            "node": "Respond Status Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "13892de5-4ad1-481b-bcd0-181487c06a8b",
+  "meta": {
+    "instanceId": "9ea7968f10c04e77807172205598f527a4da78f10b07762341342d9475e38936"
+  },
+  "id": "YYYev5xo2Xs6RzhD",
+  "tags": []
+}

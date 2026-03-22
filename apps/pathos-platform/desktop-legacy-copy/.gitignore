@@ -1,0 +1,11 @@
+node_modules/
+release/
+dist/
+.DS_Store
+*.log
+pnpm-debug.log
+*.tsbuildinfo
+
+# coverage reports
+coverage/
+

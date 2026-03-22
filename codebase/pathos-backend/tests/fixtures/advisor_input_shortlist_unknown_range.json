@@ -1,0 +1,31 @@
+{
+  "profile": {
+    "user_id": "user-unknown",
+    "years_experience": 3,
+    "target_roles": ["Backend Engineer"],
+    "skills": ["Python", "FastAPI", "SQL"],
+    "preferred_locations": ["Remote", "Denver, CO"],
+    "authorized_to_work": true
+  },
+  "job": {
+    "job_id": "job-unknown",
+    "title": "Backend Platform Engineer",
+    "company": "Orbit",
+    "location": {
+      "city": "Denver",
+      "region": "CO",
+      "country": "US",
+      "remote": false
+    },
+    "grade_range": {
+      "min_grade": null,
+      "max_grade": null
+    },
+    "posting_dates": {
+      "posted_date": "2026-02-05",
+      "closes_date": "2026-03-05"
+    },
+    "source_url": "https://example.com/jobs/job-unknown"
+  },
+  "user_notes": "Interested in backend platform work."
+}

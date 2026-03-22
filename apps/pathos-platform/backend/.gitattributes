@@ -1,0 +1,2 @@
+# Normalize JSON files to LF to prevent CI snapshot drift (Windows vs Linux)
+*.json text eol=lf

@@ -1,0 +1,181 @@
+# ============================================================================
+# CI DEVELOP WORKFLOW - PathOS Tier 1 Frontend
+# ============================================================================
+#
+# PURPOSE:
+# Enforces Definition of Done (DoD) policy for PRs targeting develop.
+# This workflow adds policy validation on top of standard quality gates:
+#   1. Policy validation (ci:validate) - day artifacts, change briefs, labels
+#   2. Linting (ESLint) - catches style issues and potential bugs
+#   3. Type checking (TypeScript) - catches type errors
+#   4. Unit tests (Vitest) - catches logic errors and regressions
+#   5. Build (Next.js) - ensures the app compiles successfully
+#
+# WHEN IT RUNS:
+# - On pull requests targeting the 'develop' branch
+#
+# POLICY REQUIREMENTS (enforced by ci:validate):
+# - Day patch artifacts must exist (artifacts/day-XX.patch, day-XX-this-run.patch)
+# - Change brief must exist (docs/change-briefs/day-XX.md)
+# - Day labels must be consistent (no mismatched day references)
+#
+# ============================================================================
+
+name: CI Develop
+
+on:
+  # Run on PRs targeting develop only
+  pull_request:
+    branches:
+      - develop
+
+# Workflow-level permissions (least privilege)
+permissions:
+  contents: read
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # QUALITY + POLICY CHECKS
+  # ==========================================================================
+  # Single job that runs all checks in sequence.
+  # Policy validation runs first to fail fast if DoD requirements are missing.
+
+  quality:
+    name: Policy + Quality Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ----------------------------------------------------------------------
+      # SETUP
+      # ----------------------------------------------------------------------
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for reliable git diff operations
+
+      # Ensure develop branch exists for diff operations
+      - name: Fetch develop branch
+        run: git fetch --no-tags --prune origin develop:refs/remotes/origin/develop
+
+      # Use Node.js LTS (22.x)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Setup pnpm with corepack-style action
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # Cache pnpm store for faster installs
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      # Install dependencies
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ----------------------------------------------------------------------
+      # POLICY VALIDATION (fail fast if DoD requirements missing)
+      # ----------------------------------------------------------------------
+
+      - name: Derive DAY from branch
+        shell: bash
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          echo "Branch: $BRANCH"
+          DAY="$(echo "$BRANCH" | sed -n 's/^feature\/day-\([0-9]\+\).*/\1/p')"
+          if [ -z "$DAY" ]; then
+            echo "Could not derive DAY from branch name: $BRANCH"
+            echo "Expected format: feature/day-<N>-..."
+            exit 1
+          fi
+          echo "DAY=$DAY" >> "$GITHUB_ENV"
+          echo "Derived DAY=$DAY"
+
+      - name: Validate DoD requirements (ci:validate)
+        run: pnpm ci:validate
+
+      # ----------------------------------------------------------------------
+      # QUALITY CHECKS
+      # ----------------------------------------------------------------------
+
+      # Step 1: Lint
+      # Catches style issues, potential bugs, and enforces coding standards.
+      - name: Lint
+        run: pnpm lint
+
+      # Step 2: Type Check
+      # Catches TypeScript type errors without emitting files
+      - name: Type Check
+        run: pnpm typecheck
+
+      # Step 3: Unit Tests
+      # Runs all Vitest tests to catch logic errors and regressions
+      - name: Test
+        run: pnpm test
+
+      # Step 4: Build
+      # Ensures the Next.js app compiles successfully for production
+      - name: Build
+        run: pnpm build
+
+      # ----------------------------------------------------------------------
+      # OWNER MAP FRESHNESS CHECK (Conditional)
+      # ----------------------------------------------------------------------
+      # Only runs if relevant code paths changed (app/, components/, lib/, store/, etc.)
+      # This prevents owner-map from blocking unrelated PRs (docs-only, CI-only, etc.)
+
+      - name: Detect if owner-map check is needed
+        id: owner-map-needed
+        run: |
+          # Get changed files between base and HEAD
+          # Prefer PR base SHA when available (pull_request event), fallback to base ref
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.sha }}"
+            echo "Using PR base SHA: $BASE_SHA"
+            CHANGED_FILES=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" || echo "")
+          else
+            BASE_REF="origin/${{ github.base_ref }}"
+            echo "Using base ref: $BASE_REF"
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD || echo "")
+          fi
+          
+          # Check if any relevant paths changed
+          OWNER_MAP_NEEDED=false
+          if [ -n "$CHANGED_FILES" ] && echo "$CHANGED_FILES" | grep -qE '^(app/|components/|lib/|store/|pages/|docs/owner-map)'; then
+            OWNER_MAP_NEEDED=true
+          fi
+          
+          echo "owner-map-needed=$OWNER_MAP_NEEDED" >> $GITHUB_OUTPUT
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo "Owner map check needed: $OWNER_MAP_NEEDED"
+
+      - name: Generate Owner Map
+        if: steps.owner-map-needed.outputs.owner-map-needed == 'true'
+        run: pnpm docs:owner-map
+
+      - name: Verify Owner Map is up to date
+        if: steps.owner-map-needed.outputs.owner-map-needed == 'true'
+        run: git diff --exit-code docs/owner-map.generated.md

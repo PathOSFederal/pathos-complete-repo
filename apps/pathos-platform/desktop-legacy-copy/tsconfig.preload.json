@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "CommonJS",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "electron"]
+  },
+  "include": [
+    "src/preload.js",
+    "src/preload-bridge.js",
+    "src/preload-benefits-bridge.js",
+    "src/preload-benefits-popout.js",
+    "src/electron-bridge.js"
+  ]
+}

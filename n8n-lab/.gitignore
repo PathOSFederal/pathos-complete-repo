@@ -1,0 +1,23 @@
+# Runtime state and generated artifacts
+/artifacts/
+/logs/
+/runs/
+/tmp/
+
+# Local intake/reference material
+/incoming/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local environment files
+.env
+.env.*
+*.local
+
+# PowerShell history and transcript residue
+*.ps1.history
+*.ps1~

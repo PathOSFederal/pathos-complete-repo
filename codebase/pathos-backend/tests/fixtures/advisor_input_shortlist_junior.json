@@ -1,0 +1,31 @@
+{
+  "profile": {
+    "user_id": "user-junior",
+    "years_experience": 2,
+    "target_roles": ["Backend Engineer"],
+    "skills": ["Python", "SQL", "API"],
+    "preferred_locations": ["Austin, TX"],
+    "authorized_to_work": true
+  },
+  "job": {
+    "job_id": "job-junior",
+    "title": "Backend Engineer",
+    "company": "ExampleCo",
+    "location": {
+      "city": "Austin",
+      "region": "TX",
+      "country": "US",
+      "remote": false
+    },
+    "grade_range": {
+      "min_grade": 1,
+      "max_grade": 3
+    },
+    "posting_dates": {
+      "posted_date": "2026-02-02",
+      "closes_date": "2026-03-02"
+    },
+    "source_url": "https://example.com/jobs/job-junior"
+  },
+  "user_notes": null
+}

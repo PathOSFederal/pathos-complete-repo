@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Benefits Tool</title>
+    <link rel="stylesheet" href="./styles/pathos-web-theme.tokens.css" />
+    <link rel="stylesheet" href="./styles/pathos-theme.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="pathos-theme dark benefits-popout-body">
+    <div class="benefits-popout-shell">
+      <nav class="nav-rail popout-nav" aria-label="PathOS navigation">
+        <button class="nav-brand" type="button">
+          <span class="nav-logo" aria-hidden="true">P</span>
+          <span>
+            <div class="nav-title">PathOS</div>
+            <div class="nav-subtitle">Reference</div>
+          </span>
+        </button>
+        <div class="nav-section">
+          <div class="nav-label">Active</div>
+          <button class="nav-item is-active" type="button" data-popout-nav-title>
+            Reference
+          </button>
+        </div>
+      </nav>
+      <main class="workbench benefits-popout-workbench">
+        <header class="benefits-popout-header">
+          <div class="benefits-popout-meta">
+            <div class="benefits-popout-title" data-benefits-popout-title>
+              Tool reference
+            </div>
+            <div class="benefits-popout-source">
+              Source: <span data-benefits-popout-source>External source</span>
+            </div>
+            <div class="benefits-popout-trust" data-benefits-popout-trust>
+              Read-only external reference. PathOS does not collect or read your entries.
+            </div>
+          </div>
+          <div class="benefits-popout-actions">
+            <button class="benefits-popout-button" type="button" data-benefits-popout-close>
+              Close
+            </button>
+            <button
+              class="benefits-popout-button is-outline"
+              type="button"
+              data-benefits-popout-close
+              data-benefits-popout-close-label
+            >
+              Back to Benefits &amp; Compensation
+            </button>
+          </div>
+        </header>
+        <div class="benefits-popout-content">
+          <section class="benefits-popout-tool">
+            <div
+              class="benefits-popout-browser-bar embedded-browser-bar"
+              aria-label="External tool navigation"
+            >
+              <div class="embedded-controls">
+                <button
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Back"
+                  title="Back"
+                  data-benefits-popout-nav="back"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">&lt;</span>
+                  <span class="embedded-control-label">Back</span>
+                </button>
+                <button
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Forward"
+                  title="Forward"
+                  data-benefits-popout-nav="forward"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">&gt;</span>
+                  <span class="embedded-control-label">Forward</span>
+                </button>
+                <button
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Reload"
+                  title="Reload"
+                  data-benefits-popout-nav="reload"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">R</span>
+                  <span class="embedded-control-label">Reload</span>
+                </button>
+                <button
+                  class="embedded-control-button"
+                  type="button"
+                  aria-label="Home"
+                  title="Home"
+                  data-benefits-popout-nav="home"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">H</span>
+                  <span class="embedded-control-label">Home</span>
+                </button>
+              </div>
+              <div class="embedded-escape">
+                <button
+                  class="embedded-control-button is-primary"
+                  type="button"
+                  aria-label="Open current page in your default browser"
+                  title="Open current page in your default browser"
+                  data-benefits-popout-nav="open-external"
+                >
+                  <span class="embedded-control-icon" aria-hidden="true">Ext</span>
+                  <span class="embedded-control-label">Open in browser</span>
+                </button>
+              </div>
+            </div>
+            <div
+              class="benefits-popout-loading"
+              id="benefits-popout-loading"
+              data-benefits-popout-loading
+              hidden
+            >
+              <span>Loading external source…</span>
+            </div>
+            <div
+              class="benefits-popout-warning"
+              data-benefits-popout-usajobs-warning
+              hidden
+            >
+              This listing link may be expired. Showing USAJOBS search results instead.
+            </div>
+            <div class="benefits-popout-webview-frame">
+              <webview
+                class="benefits-popout-webview"
+                data-benefits-popout-webview
+                id="benefits-popout-webview"
+                title="External benefits tool"
+              ></webview>
+              <div
+                class="benefits-popout-empty"
+                data-benefits-popout-empty
+                id="benefits-popout-empty"
+                hidden
+              >
+                <div class="benefits-popout-empty-title">
+                  This tool could not be loaded. Please close and reopen the popout.
+                </div>
+                <button
+                  class="benefits-popout-button is-outline benefits-popout-reload"
+                  type="button"
+                  data-benefits-popout-reload
+                >
+                  Reload
+                </button>
+                <div
+                  class="benefits-popout-empty-details"
+                  data-benefits-popout-empty-details
+                  id="benefits-popout-empty-details"
+                  hidden
+                >
+                  Load failed:
+                  <span data-benefits-popout-error-code id="benefits-popout-error-code"></span>
+                  <span
+                    data-benefits-popout-error-description
+                    id="benefits-popout-error-description"
+                  ></span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+      <aside class="advisor-rail benefits-popout-guidance" data-advisor-surface="benefits-popout">
+        <header class="advisor-header">
+          <div>
+            <div class="advisor-eyebrow">PathAdvisor</div>
+            <h2>PathAdvisor</h2>
+          </div>
+          <div class="advisor-header-actions">
+            <div class="advisor-conversation-controls">
+              <button class="advisor-action-button" type="button" data-conversation-new>
+                New
+              </button>
+              <button class="advisor-action-button" type="button" data-conversation-clear>
+                Clear
+              </button>
+              <button class="advisor-action-button" type="button" data-conversation-export>
+                Export
+              </button>
+            </div>
+            <div class="advisor-quick-actions" data-quick-actions>
+              <button
+                class="advisor-action-button"
+                type="button"
+                aria-expanded="false"
+                data-quick-actions-toggle
+              >
+                Quick actions
+              </button>
+              <div
+                class="quick-actions-panel"
+                role="dialog"
+                aria-label="Quick actions"
+                hidden
+                data-quick-actions-panel
+              >
+                <div class="quick-actions-header">
+                  <div class="advisor-label">Suggested prompts</div>
+                  <button
+                    class="advisor-action-button is-ghost"
+                    type="button"
+                    data-quick-actions-close
+                  >
+                    Close
+                  </button>
+                </div>
+                <div class="chip-row">
+                  <button class="chip" type="button" data-intent="explain-page">
+                    Summarize this role
+                  </button>
+                  <button class="chip" type="button" data-intent="qualified">
+                    Compare to my target grade
+                  </button>
+                  <button class="chip" type="button" data-intent="prepare-next">
+                    Draft a follow-up plan
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div class="advisor-body">
+          <div class="advisor-section">
+            <div class="advisor-label">Calculator guidance</div>
+            <div class="advisor-guidance-card">
+              <div class="advisor-guidance-title">Tool Guidance</div>
+              <ul
+                class="advisor-guidance-list"
+                data-benefits-popout-guidance-list
+              >
+                <li>Open a tool to view guidance statements.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="advisor-section advisor-conversation">
+            <div class="advisor-label">Conversation</div>
+            <div class="briefing-feed" role="list"></div>
+            <button class="jump-latest" type="button" data-jump-latest hidden>
+              Jump to latest
+            </button>
+            <div class="briefing-empty">
+              Start typing to chat with PathAdvisor.
+            </div>
+          </div>
+          <div class="advisor-section advisor-input-section">
+            <label class="advisor-label" for="benefits-popout-followup-input">
+              Send a message
+            </label>
+            <form class="advisor-input" data-live-followup-form>
+              <textarea
+                id="benefits-popout-followup-input"
+                placeholder="Ask a question, paste a requirement, or request a quick comparison."
+                rows="2"
+                data-live-followup-input
+              ></textarea>
+              <button class="send-button" type="submit">Send</button>
+            </form>
+            <div class="advisor-note">
+              Local, read-only guidance. No automation.
+            </div>
+            <div class="advisor-trust">
+              You're viewing external sources inside PathOS. PathOS does not access your data.
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <script src="./conversation-store.js"></script>
+    <script src="./benefits-popout.js"></script>
+  </body>
+</html>

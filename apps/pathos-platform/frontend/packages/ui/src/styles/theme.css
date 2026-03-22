@@ -1,0 +1,52 @@
+/**
+ * ============================================================================
+ * PATHOS SHARED THEME -- Theme token loader + shared interaction affordances
+ * ============================================================================
+ *
+ * Loads available theme token sets and shared utility styles.
+ * Token values are defined in:
+ * - ./themes/theme-shared.css
+ * - ./themes/theme-mix.css
+ * - ./themes/theme-legacy.css
+ *
+ * BOUNDARY RULE: No next/* or electron/* imports.
+ */
+
+@import './themes/theme-shared.css';
+@import './themes/theme-mix.css';
+@import './themes/theme-legacy.css';
+
+/* ---- Interactive Hover v1 (executive-grade, token-only) ---- */
+/* Applied to buttons, dropdown triggers, tabs, icon buttons. Hover/active/focus-visible only; disabled has no hover. */
+.pathos-interactive-hover {
+  transition: background-color 180ms ease-out, border-color 180ms ease-out;
+}
+.pathos-interactive-hover:not(:disabled):hover {
+  background: var(--p-surface2);
+  border-color: var(--p-border-light);
+}
+.pathos-interactive-hover:not(:disabled):active {
+  background: var(--p-surface2);
+  border-color: var(--p-border-strong);
+}
+.pathos-interactive-hover:focus-visible {
+  outline: none;
+  box-shadow: var(--p-focus-ring);
+}
+
+/* ---- Interaction affordances (instrument panel) ---- */
+/* Prompt rows: default surface2; hover lifts to surface for clear hierarchy. */
+.pathos-prompt-row {
+  min-height: 2.25rem;
+}
+.pathos-prompt-row:hover {
+  background: var(--p-surface);
+  border-color: var(--p-accent-muted);
+}
+.pathos-prompt-row:focus-visible {
+  outline: none;
+  box-shadow: var(--p-focus-ring);
+}
+.pathos-prompt-row + .pathos-prompt-row {
+  margin-top: 0.25rem;
+}
