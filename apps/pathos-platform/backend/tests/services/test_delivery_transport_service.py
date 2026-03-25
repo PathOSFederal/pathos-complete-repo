@@ -4,12 +4,17 @@ import json
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.db.repo.alert_digest_repo import AlertDigestRepo
 from app.db.repo.alert_run_repo import AlertRunRepo
 from app.main import create_app
 from app.models.alert_digest import AlertDigestPayload, DeliveryIntent
-from app.services.delivery_transport_service import EmailDigestFutureTransport, LocalDigestTransport
+from app.services.delivery_transport_service import (
+    EmailDigestFutureTransport,
+    LocalDigestTransport,
+    PlaceholderDeliveryDisabledError,
+)
 
 
 def _intent(*, run_id: str, alert_rule_id: str) -> DeliveryIntent:
@@ -72,9 +77,19 @@ def test_local_digest_transport_persists_digest(monkeypatch, tmp_path) -> None:
 
 def test_email_digest_future_transport_is_noop(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "delivery_transport_noop.db"))
+    monkeypatch.setenv("PATHOS_ENV", "local")
     transport = EmailDigestFutureTransport()
 
     transport.deliver(_intent(run_id="run-1", alert_rule_id="rule-1"))
 
     rows = AlertDigestRepo.list_recent(limit=5)
     assert rows == []
+
+
+def test_email_digest_future_transport_is_disabled_outside_local(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "delivery_transport_prod.db"))
+    monkeypatch.setenv("PATHOS_ENV", "staging")
+    transport = EmailDigestFutureTransport()
+
+    with pytest.raises(PlaceholderDeliveryDisabledError, match="disabled outside local/dev/test/ci"):
+        transport.deliver(_intent(run_id="run-2", alert_rule_id="rule-2"))

@@ -213,3 +213,30 @@ def test_saved_search_run_config_missing_skips_without_upstream_audit(monkeypatc
         row = conn.execute("SELECT COUNT(1) FROM upstream_api_audit_records WHERE endpoint = '/api/search'").fetchone()
     assert row is not None
     assert int(row[0]) == 0
+
+
+def test_alert_rule_rejects_placeholder_delivery_mode_outside_local(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_ENV", "staging")
+    monkeypatch.setenv("PATHOS_API_KEYS", "production-api-key-1234")
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_placeholder_rejected.db"))
+    app = create_app()
+
+    with TestClient(app) as client:
+        saved = client.post(
+            "/api/v1/saved-searches",
+            headers={"Authorization": "Bearer production-api-key-1234"},
+            json={"name": "S", "filters": {"keyword": "analyst"}},
+        ).json()
+        response = client.post(
+            "/api/v1/alert-rules",
+            headers={"Authorization": "Bearer production-api-key-1234"},
+            json={
+                "saved_search_id": saved["id"],
+                "min_score_threshold": 0,
+                "max_per_day": 10,
+                "cooldown_hours": 0,
+                "delivery_mode": "email_digest_future",
+            },
+        )
+
+    assert response.status_code == 400

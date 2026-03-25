@@ -1,0 +1,562 @@
+# PathOS Backend Full Audit
+
+## 1. Executive assessment
+- Overall backend maturity: functional but incomplete
+- The backend is materially beyond a toy scaffold: it has a real FastAPI app, deterministic scoring/evaluation paths, official USAJOBS adapter code, persistence, migrations, worker orchestration, structured logging, and a large passing test suite when the runtime environment is sane. It is not yet "PathOS intelligence-layer ready" because too much of the actual PathAdvisor brain is still heuristic, contract-first, or placeholder. The backend is strongest as a trust boundary and orchestration runtime today; it is not yet a mature deterministic intelligence layer that can justify PathAdvisor-grade conclusions.
+- Top 5 blockers
+  - Intelligence snapshots are still explicitly stubbed contract-first logic, not production decision modules (`app/intelligence/snapshots/engine.py:1`, `app/intelligence/snapshots/engine.py:64`).
+  - Core advisor logic is a narrow heuristic scorer over title keywords, experience band, location, and work auth; it does not yet model the broader PathAdvisor decision space (`app/engine/scoring.py:7`, `app/engine/evaluator.py:17`).
+  - Runtime startup/test reliability depends on ambient environment correctness; a shell-level `PATHOS_ENV=PROD` breaks the suite because startup validation only allows `production`, not `prod`/`PROD` (`app/core/startup_validation.py:21-24`, `app/core/startup_validation.py:43-44`, live validation below).
+  - Auth is only shared bearer API key gating, with open-mode fallback when keys are unset; there is no user identity, role model, tenant separation, or per-resource authorization (`app/core/security.py:7-22`, `README.md:124`).
+  - Delivery and external operations are still partial: `EmailDigestFutureTransport` is a deterministic no-op placeholder, and there are no actual deployment manifests in-repo despite deployment docs (`app/services/delivery_transport_service.py:40`, repo search found docs only and no `Dockerfile`/compose manifest).
+- Top 5 strengths
+  - USAJOBS ingestion is cleanly isolated to the official API adapter and uses official headers (`app/adapters/usajobs/client.py:57-82`).
+  - Deterministic auditability is first-class in several places: advisor trace IDs and input hashes, export integrity hashes, upstream payload hashes, and checkpoint ledgers (`app/services/advisor_service.py:20-25`, `app/services/export_service.py:25-51`, `app/db/repo/upstream_audit_repo.py:30-49`, `app/services/saved_search_checkpoint_service.py:40-95`).
+  - API bootstrap is relatively disciplined: routers are thin, global error handling is standardized, request IDs are propagated, readiness checks exist, and rate limiting is isolated middleware (`app/main.py:62-142`, `app/core/error_handlers.py:46-134`, `app/middleware/request_id.py:39-95`, `app/api/v1/health.py:64-179`).
+  - Worker/job processing has meaningful operational guardrails: DB lock, time/rule/job budgets, skip reasons, backoff events, ledger/checkpoints, and quarantine logging (`app/services/alerts_run_service.py:61`, `app/services/alerts_run_service.py:261-316`, `app/services/alerts_run_service.py:379`, `app/services/alerts_run_service.py:413-417`, `app/services/alerts_run_service.py:474`, `app/services/alerts_run_service.py:571`, `app/services/alerts_run_service.py:817`, `app/services/alerts_run_service.py:908`).
+  - Test depth is real, not nominal: with `PATHOS_ENV=local`, `poetry run pytest -q` passed `265` tests with `90.70%` coverage.
+
+## 2. Architecture audit
+- Current backend architecture
+  - FastAPI app factory wires routers, CORS, request ID middleware, in-memory rate limiting, global error handlers, startup config validation, readiness checks, and DB initialization (`app/main.py:62-142`).
+  - Business logic mostly lives in service modules; persistence is repo-style raw SQL over SQLite/Postgres connectors rather than ORM entities (`app/services/*`, `app/db/repo/*`, `app/db/connection.py`).
+  - Deterministic logic is split across:
+    - advisor engine (`app/engine/evaluator.py`, `app/engine/scoring.py`, `app/engine/reason_library.py`)
+    - job scoring (`app/services/job_scoring_service.py`)
+    - alerts/delta/checkpointing (`app/services/alerts_run_service.py`, `app/services/delta_engine_service.py`, `app/services/saved_search_checkpoint_service.py`)
+    - intelligence snapshots (`app/intelligence/snapshots/*`)
+  - Optional conversation/narration lives in separate LLM modules and thread-summary refinement paths (`app/llm/*`, `app/services/narration_service.py`, `app/services/thread_service.py:136`).
+- What is clean
+  - Router-to-service separation is mostly respected; route files are thin.
+  - External USAJOBS calls are isolated to one adapter client.
+  - Persistence boundaries are explicit repositories instead of ad hoc writes from routers.
+  - Error contracts and request correlation are consistent across the app.
+  - Worker lock orchestration is cleanly isolated in `SchedulerEngine` and reused by the worker entrypoint (`app/worker/scheduler_engine.py`).
+- What is fragile
+  - Startup behavior is highly environment-sensitive. `validate_startup_config()` rejects invalid `PATHOS_ENV` values early for both API and worker, and current shell state can make the repo appear broken even though tests pass under sane env (`app/core/startup_validation.py:21-24`, `app/core/startup_validation.py:43-44`).
+  - `init_db()` is called from many repository paths, which is safe-ish but creates repeated startup/migration coupling and hidden persistence side effects (`app/db/repo/audit_repo.py:10-11`, `app/db/repo/thread_repo.py:20`, `app/db/repo/upstream_audit_repo.py:62`).
+  - SQLAlchemy/Alembic ORM metadata is effectively unused scaffolding (`app/db/sqlalchemy_metadata.py:1-4`), while most schema state is maintained via custom SQL runner plus Alembic for Postgres. That split works, but it raises drift risk.
+  - Some audit concepts are overloaded. `UpstreamAuditRepo` is used not only for external upstream calls but also for internal saved-search CRUD audit markers (`app/services/saved_search_service.py:73-89`), which muddies meaning.
+- Violations of PathOS doctrine
+  - The "intelligence layer" is not yet first-class enough. Snapshot endpoints are explicitly stubbed and return hard-coded or lightly derived scores (`app/intelligence/snapshots/engine.py:1`, `app/intelligence/snapshots/engine.py:64`).
+  - The backend still looks partly like orchestration plus contract support rather than a substantive deterministic decision engine.
+  - The conversation layer is mostly separated, but thread summaries can invoke an LLM directly from runtime when `OPENAI_API_KEY` is present (`app/services/thread_service.py:136-141`), which is acceptable as optional rendering only if clients treat it as non-authoritative.
+- Runtime vs learning separation status
+  - Implemented: runtime code is deterministic and artifact/version driven in several places, for example reason library files under `artifacts/rulesets/...` and prompt bundles under `artifacts/prompts/...` (`app/engine/reason_library.py:9-11`, `app/llm/narrator.py:11-18`).
+  - Implemented: there is no visible training code in runtime paths.
+  - Missing: there is no explicit artifact ingestion/version management layer for learned or evaluated knowledge packs beyond simple version constants and filesystem reads (`app/intelligence/snapshots/versions.py`, `app/engine/reason_library.py:9-11`).
+  - Assessment: separation is conceptually respected, but the runtime is still consuming mostly hand-authored heuristics and stubbed artifacts rather than mature versioned intelligence artifacts.
+- Trust-boundary assessment
+  - Strong points:
+    - secrets stay server-side for USAJOBS and OpenAI
+    - clients receive canonical models, not raw USAJOBS payloads
+    - export/audit/upstream hash features improve traceability
+  - Weak points:
+    - auth boundary is only a shared API key
+    - open mode when no keys are configured is unsafe outside dev
+    - privacy filtering is basic and best-effort, not policy-grade
+
+## 3. API and contract audit
+For each major endpoint/route group:
+
+### Health and Ops
+- purpose
+  - Liveness, readiness, and operator-status visibility (`app/api/v1/health.py`, `app/api/v1/ops.py`).
+- current status
+  - Implemented and meaningful.
+- contract quality
+  - Good. `/health/ready` returns migration state plus worker metadata, not just `"ok"` (`app/api/v1/health.py:64-179`).
+- validation quality
+  - Strong on startup/readiness; weak on runtime auth model because ops still uses the same shared key.
+- missing behaviors
+  - No deeper dependency health fan-out, no queue depth, no storage pressure, no external secret validation beyond startup env presence.
+- risks
+  - Runtime readiness depends on strict env values; a common alias like `PROD` fails (`app/core/startup_validation.py:21-24`, `app/core/startup_validation.py:43-44`).
+
+### Advisor
+- purpose
+  - Deterministic job/profile evaluation plus optional narration (`app/api/v1/advisor.py`).
+- current status
+  - Partially implemented but narrow.
+- contract quality
+  - Typed Pydantic contracts are present and stable (`app/models/advisor.py`).
+- validation quality
+  - Inputs are structurally validated, but semantic depth is limited.
+- missing behaviors
+  - No richer evidence graph, no policy explanation tree, no explicit invariant proofs, no questionnaire modeling, no resume/document package reasoning.
+- risks
+  - Output explainability is readable but thin; `evidence` is left empty in core output (`app/engine/evaluator.py:49`).
+
+### Intelligence snapshots
+- purpose
+  - Contract-pack endpoints for career readiness, resume readiness, job match, application confidence (`app/api/v1/intelligence.py`).
+- current status
+  - Scaffolded to partially implemented; not production intelligence.
+- contract quality
+  - Good shape and version metadata.
+- validation quality
+  - Strong schema validation; weak behavioral validity.
+- missing behaviors
+  - Real scoring logic, artifact-backed rules, calibration, domain-specific evidence resolution.
+- risks
+  - These endpoints can look production-ready while still being stubs because responses are polished and deterministic.
+
+### Jobs search and score
+- purpose
+  - Official USAJOBS search and deterministic scoring over canonicalized jobs (`app/api/v1/jobs.py`).
+- current status
+  - Implemented.
+- contract quality
+  - Good. Canonical job model prevents upstream schema bleed (`app/domain/jobs/canonical_models.py`).
+- validation quality
+  - Good request validation in `JobSearchRequest` and `JobScoreRequest`.
+- missing behaviors
+  - No persistence-backed search cache, no deep canonical taxonomy, no advanced semantic match/ranking.
+- risks
+  - Scoring model is still fairly simple and includes a suspicious placeholder path where any non-empty `preferred_series` yields a fixed `series_alignment = 30` and a risk because series is unavailable (`app/services/job_scoring_service.py:40-47`).
+
+### Saved searches, alerts, digests, desktop overview
+- purpose
+  - Saved search CRUD, rule CRUD, manual/worker alert runs, digest history, desktop-facing overview endpoints (`app/api/v1/saved_searches.py`, `app/api/v1/alerts.py`, `app/api/v1/desktop.py`).
+- current status
+  - Implemented with meaningful orchestration.
+- contract quality
+  - Mostly good, though there are legacy compatibility paths (`/alert-rules` and `/alerts/rules`) that signal API drift (`app/api/v1/alerts.py:94-116`).
+- validation quality
+  - Good structural validation on rules and search payloads.
+- missing behaviors
+  - No actual outbound notification delivery beyond local persistence; no user/channel preferences; no multi-tenant ownership model.
+- risks
+  - Desktop overview is useful for frontend contract support, but it should not be mistaken for a full backend intelligence surface.
+
+### Threads, summaries, export, wipe, audit
+- purpose
+  - Trust UX: opt-in storage, linked audits, export integrity, deletion, wipe (`app/api/v1/threads.py`, `app/api/v1/thread_summary.py`, `app/api/v1/export.py`, `app/api/v1/wipe.py`, `app/api/v1/audit.py`).
+- current status
+  - Implemented and one of the stronger parts of the repo.
+- contract quality
+  - Good and aligned with privacy/trust goals.
+- validation quality
+  - Good enough for shape and consent flows.
+- missing behaviors
+  - No field-level redaction policy engine for exports, no tenant-scoped retention/wipe semantics.
+- risks
+  - Wipe uses a static confirm token `"WIPE_ALL"` rather than stronger operator controls (`app/api/v1/wipe.py:17-21`).
+
+### Profile and advisor session
+- purpose
+  - Persist user profile defaults and append-only advisor session context/events (`app/api/v1/profile_v1.py`, `app/api/v1/advisor_session.py`).
+- current status
+  - Implemented but lightweight.
+- contract quality
+  - Good schema-wise.
+- validation quality
+  - Mixed. Session payload byte limit is good; profile sensitivity detection is simplistic.
+- missing behaviors
+  - No versioned profile schema evolution strategy beyond v1, no richer session lineage into decision-engine modules.
+- risks
+  - Sensitive-input detection will catch some obvious strings but is nowhere near robust PII/private-doc handling (`app/services/profile_service.py:31-55`).
+
+## 4. Intelligence-layer audit
+- What real deterministic intelligence exists today
+  - Advisor evaluation:
+    - role/title alignment
+    - skill overlap
+    - experience range scoring
+    - location match
+    - work authorization scoring
+    - mapped recommendation/confidence band (`app/engine/scoring.py`, `app/engine/evaluator.py`)
+  - Job scoring:
+    - grade/location/remote/keyword alignment with weighted ruleset versioning (`app/services/job_scoring_service.py:28-164`, `app/services/job_scoring_ruleset.py`)
+  - Alerts:
+    - deterministic scoring of search results
+    - delta detection
+    - thresholding
+    - cooldown/min-interval suppression
+    - digest generation (`app/services/saved_search_runner_service.py`, `app/services/delta_engine_service.py`, `app/services/alert_evaluator.py`, `app/services/digest_builder_service.py`)
+  - Thread summarization:
+    - deterministic summary synthesis with optional LLM refinement (`app/engine/thread_summary_v1.py`, `app/services/thread_service.py:126-141`)
+- What is just orchestration/scaffolding
+  - Intelligence snapshots are the clearest example. The file itself says "stubs for contract-first integration" and at least one score is literally hard-coded (`app/intelligence/snapshots/engine.py:1`, `app/intelligence/snapshots/engine.py:64`).
+  - SQLAlchemy metadata is scaffolding only (`app/db/sqlalchemy_metadata.py:1-4`).
+  - Email digest delivery is a placeholder no-op (`app/services/delivery_transport_service.py:40`).
+- What recommendation/scoring/gap-analysis logic is implemented
+  - Simple heuristic rule engines are implemented.
+  - Gap analysis exists mainly as:
+    - low skill overlap risks/actions
+    - location mismatch risks/actions
+    - deterministic snapshot top gaps/suggestions
+  - The implemented logic is explainable, but it is still low-dimensional.
+- What still needs to be built for a true PathAdvisor backend brain
+  - Deterministic qualification reasoning over vacancy text, specialized experience, grade evidence, document package completeness, questionnaire fit, and confidence calibration.
+  - Artifact-backed rules/knowledge packs rather than stubbed constants and hard-coded copy.
+  - A first-class explanation model tying outputs to exact evidence references and rule activations.
+  - Canonical user-evidence models beyond profile/search filters.
+- Whether explainability outputs are sufficient
+  - Partially.
+  - Advisor outputs include reason/risk/action codes and metadata versions (`app/models/advisor.py`).
+  - Job score outputs include breakdowns, reasons, risks, ruleset and mapper versions (`app/models/job_score.py`).
+  - Export and audit hashing is strong.
+  - Missing:
+    - richer evidence refs in advisor outputs
+    - rule firing provenance
+    - end-to-end explanation lineage across alerts/snapshots
+    - stable explanation packs for user-facing trust UX
+
+## 5. Data/adapters audit
+- USAJOBS compliance check
+  - Implemented and compliant with the official API path and header style:
+    - base URL defaults to `https://data.usajobs.gov`
+    - endpoint `/api/search`
+    - headers include `Authorization-Key` and `User-Agent`
+    - all outbound calls are in `USAJobsClient` (`app/adapters/usajobs/client.py:57-82`)
+  - I found no alternate ingestion source in runtime code.
+- canonical models
+  - Implemented via `CanonicalJob` and related models (`app/domain/jobs/canonical_models.py`).
+- mappers/adapters
+  - Implemented. `normalize_search_items()` is the real mapper; `map_usajobs_item()` is only a compatibility shim (`app/adapters/usajobs/mapper.py:1-26`).
+- raw payload retention
+  - Present. Upstream audit records can store canonicalized raw payload JSON plus SHA-256 (`app/db/repo/upstream_audit_repo.py:30-49`, `app/db/repo/upstream_audit_repo.py:66-113`).
+  - Risk: config includes knobs like `AUDIT_LOG_RAW_UPSTREAM`, but the current save path persists `upstream_raw_payload` whenever supplied; the config knob is not clearly enforced in `UpstreamAuditRepo.save_record()`.
+- versioning
+  - Present but uneven:
+    - mapper version on canonical job source metadata
+    - job scoring ruleset version
+    - reason library version
+    - snapshot rule/knowledge pack versions
+  - Missing:
+    - explicit upstream schema version pinning
+    - stronger artifact version registry
+- validation
+  - Good schema validation via `USAJobsEnvelope.model_validate(...)` after fetch (`app/services/job_search_service.py:324-329`).
+- failure handling
+  - Good mapping for config/auth/rate-limit/unavailable/schema errors with audit rows and controlled HTTP codes (`app/services/job_search_service.py:257-323`, `app/api/v1/jobs.py:76-97`).
+- missing adapters
+  - If PathOS intelligence needs richer resume/doc/questionnaire evidence, those adapters do not exist yet.
+
+## 6. Persistence and job-processing audit
+- DB structure quality
+  - Good enough for a small service. Tables cover audits, threads, saved searches, alerts, digests, runs, checkpoints, telemetry, migration audit, and upstream audit (`app/db/migrations/*.sql`).
+  - Risk: split migration story between custom SQLite SQL runner and Alembic/Postgres adds complexity (`app/db/connection.py:260-379`, `alembic/*`).
+- migrations
+  - Implemented.
+  - SQLite uses ordered SQL files and a custom runner.
+  - Postgres uses Alembic.
+  - Startup also performs compatibility `ALTER TABLE` patches for older SQLite schemas (`app/db/connection.py:285-356`), which is practical but indicates schema evolution is not fully centralized.
+- repository/service boundaries
+  - Mostly clean.
+  - Repositories stay low-level.
+  - Services do orchestration.
+  - Weak spot: many repos call `init_db()` internally, which couples every repo call to startup/migration logic.
+- worker/background task readiness
+  - Strong for a single-process deterministic worker:
+    - startup preflight
+    - lock-based single-run protection
+    - budget caps
+    - exponential backoff
+    - operator pause flags
+  - Still not a queue/worker platform; no distributed task broker, no dead-letter queue, no multi-worker coordination beyond DB locks.
+- idempotency/checkpointing for ingestion if applicable
+  - Implemented with checkpoint and ledger tables (`app/db/migrations/009_ingestion_checkpoint_ledger_v1.sql`).
+  - Service layer records outcomes on both success and failure (`app/services/saved_search_checkpoint_service.py:40-95`, `app/services/alerts_run_service.py:571`, `app/services/alerts_run_service.py:748`, `app/services/alerts_run_service.py:789`).
+
+## 7. Security, privacy, and trust audit
+- secrets/config handling
+  - Good: secrets are env-driven and not returned by diagnostics; tests explicitly verify redaction behavior.
+  - Weak: `.env` in workspace contains a live-looking USAJOBS key/user-agent value. Even if dev-only, that is poor secret hygiene.
+- auth/access concerns
+  - Present but minimal:
+    - shared bearer API key set
+    - open mode if no keys configured (`app/core/security.py:7-22`)
+  - Missing:
+    - user auth
+    - roles/scopes
+    - tenant isolation
+    - per-resource authorization
+- PII/private-document handling concerns
+  - Threads are opt-in and default ephemeral (`app/services/thread_service.py:24-35`).
+  - Exports and wipe flows support trust UX.
+  - Profile sensitive-pattern filtering is too weak for true private-document protection (`app/services/profile_service.py:31-55`).
+  - Narration redaction exists, but there is no comprehensive privacy classification/control layer.
+- local-first/on-prem friendliness
+  - Strong overall:
+    - SQLite default
+    - no mandatory cloud dependency for deterministic core
+    - optional LLM only
+    - official ingestion can run server-side
+  - Weakness:
+    - if thread summaries or narration use OpenAI in runtime, deployments must clearly disable or opt into that path.
+- audit logging and traceability
+  - Strong:
+    - request IDs
+    - canonical error envelopes
+    - advisor trace IDs/input hashes
+    - upstream payload hashes
+    - migration audit
+    - export hashes
+- risky trust-boundary leaks
+  - Wipe confirm token is static and weak.
+  - Shared-key auth is insufficient for production trust boundaries.
+  - Saved-search CRUD writes into `upstream_api_audit_records`, which can blur external-vs-internal audit semantics.
+
+## 8. Testing audit
+- existing test categories
+  - Strong breadth: API categories, services, repo contracts, integrity, boundary/misuse/use-case/positive/negative tests, openapi, auth, migrations, worker.
+- gaps by category
+  - Decision-engine semantic quality tests are still shallow relative to PathAdvisor ambitions.
+  - No load/performance testing.
+  - No chaos/failure-injection around production deployment topology.
+  - No explicit contract tests for deployment manifests because there are no manifests.
+- whether tests prove behavior or just existence
+  - Mostly behavior. Many tests verify deterministic contracts, audit rows, skip reasons, and failure mappings.
+  - Important caveat: the suite can be made to fail broadly by ambient shell env state (`PATHOS_ENV=PROD`). That means test harness resilience is weaker than it should be.
+- missing high-value tests
+  - More golden tests for advisor engine decisions against real PathAdvisor scenarios.
+  - Snapshot engine truth tests once real logic exists.
+  - End-to-end privacy/export/redaction tests around richer user evidence.
+  - Production-shaped startup tests with explicit env sanitization.
+
+## 9. Deployment and operations audit
+- environment readiness
+  - Local/dev: yes, assuming env is sane.
+  - Staging: partial.
+  - Production-shaped: partial, not enough yet.
+- Docker/deployment quality
+  - Weak. There is deployment documentation (`docs/ops/deployment-local-compose.md`) but no actual Dockerfile or compose manifest in the repo.
+- health checks
+  - Good. Liveness and readiness endpoints exist and readiness checks migration state plus worker metadata (`app/api/v1/health.py`).
+- observability
+  - Good structured logging and bounded telemetry.
+  - Missing tracing backend integration, metrics export, dashboards, and alerting configuration.
+- runbooks/docs quality
+  - Good for a small backend. Runbook and incident docs exist.
+  - Weakness: docs are ahead of runtime maturity in places; they can make the backend look more production-shaped than the underlying intelligence actually is.
+- what would break in staging/prod
+  - If `PATHOS_ENV` is set to `PROD` instead of `production`, startup validation fails.
+  - User/tenant security boundaries are not sufficient for shared production use.
+  - Real email/push delivery is absent.
+  - True PathAdvisor intelligence quality is not there yet even though the APIs are present.
+
+## 10. Completion assessment
+Score each area 0-5 and explain:
+- architecture: 4
+  - Clean layering and useful operational design, but migration/runtime coupling and intelligence-vs-contract imbalance remain.
+- contracts: 4
+  - Strong typed API contracts, good error envelope discipline, but some legacy route duplication and stubbed semantics behind polished contracts.
+- intelligence layer: 2
+  - Real deterministic heuristics exist, but the larger PathAdvisor brain is still missing and snapshots are explicitly stubs.
+- adapters/ingestion: 4
+  - USAJOBS path is clean, official-only, validated, and auditable.
+- persistence: 4
+  - Broad schema coverage and checkpointing exist; migration split and repo-init coupling reduce confidence.
+- testing: 4
+  - Large passing suite with real coverage, but too sensitive to ambient env and still under-tests semantic intelligence quality.
+- security/privacy: 2
+  - Strong traceability and some trust UX; weak auth/access control and only basic privacy safeguards.
+- observability: 4
+  - Structured logs, telemetry, request IDs, migration audit, health/readiness are present; distributed tracing/metrics export are not.
+- deployment readiness: 2
+  - Docs exist, actual deployment artifacts do not.
+- docs/maintainability: 4
+  - Good documentation density and comments; some docs overstate maturity.
+
+## 11. What is left for completion
+Break remaining work into:
+
+### Must do before backend can be considered “PathOS intelligence-layer ready”
+- title
+  - Replace snapshot stubs with real deterministic intelligence modules
+  - why it matters
+    - Current endpoints can look complete while returning contract-first placeholder scoring.
+  - severity [critical/high/medium/low]
+    - critical
+  - estimated effort [S/M/L]
+    - L
+  - dependencies
+    - rules/knowledge artifact design, canonical evidence model
+  - exact files likely involved if identifiable
+    - `app/intelligence/snapshots/engine.py`
+    - `app/intelligence/snapshots/models.py`
+    - new domain modules under `app/intelligence/`
+- title
+  - Expand advisor engine from heuristic fit scoring to real PathAdvisor qualification reasoning
+  - why it matters
+    - The current engine is too shallow for intelligence-product claims.
+  - severity
+    - critical
+  - estimated effort
+    - L
+  - dependencies
+    - vacancy/evidence modeling, rule packs, scenario corpus
+  - exact files likely involved if identifiable
+    - `app/engine/evaluator.py`
+    - `app/engine/scoring.py`
+    - `app/engine/reason_library.py`
+    - `app/models/advisor.py`
+- title
+  - Harden production trust boundary beyond shared API keys
+  - why it matters
+    - Current auth is not acceptable for multi-user or shared production environments.
+  - severity
+    - critical
+  - estimated effort
+    - L
+  - dependencies
+    - product auth model, deployment assumptions
+  - exact files likely involved if identifiable
+    - `app/core/security.py`
+    - `app/main.py`
+    - route dependencies across `app/api/v1/*`
+- title
+  - Add explicit explanation provenance and evidence lineage to intelligence outputs
+  - why it matters
+    - Trust-first UX requires auditable reasons tied to exact inputs/rules, not just readable text.
+  - severity
+    - critical
+  - estimated effort
+    - M
+  - dependencies
+    - real deterministic modules
+  - exact files likely involved if identifiable
+    - `app/models/advisor.py`
+    - `app/models/job_score.py`
+    - `app/intelligence/snapshots/models.py`
+    - `app/services/export_service.py`
+- title
+  - Replace placeholder delivery/runtime gaps with deliberate production decisions
+  - why it matters
+    - A no-op transport is acceptable during scaffolding, not as hidden production behavior.
+  - severity
+    - high
+  - estimated effort
+    - M
+  - dependencies
+    - operator/delivery product decision
+  - exact files likely involved if identifiable
+    - `app/services/delivery_transport_service.py`
+    - `app/services/alerts_run_service.py`
+
+### Should do soon after
+- title
+  - Sanitize startup/test environment handling
+  - why it matters
+    - Ambient env poisoning should not derail the full suite so easily.
+  - severity
+    - high
+  - estimated effort
+    - S
+  - dependencies
+    - none
+  - exact files likely involved if identifiable
+    - `app/core/startup_validation.py`
+    - `tests/conftest.py`
+    - relevant startup tests
+- title
+  - Formalize migration strategy instead of mixed runner-plus-patch behavior
+  - why it matters
+    - Reduces schema drift and startup complexity.
+  - severity
+    - high
+  - estimated effort
+    - M
+  - dependencies
+    - persistence strategy decision
+  - exact files likely involved if identifiable
+    - `app/db/connection.py`
+    - `app/db/migrations/*`
+    - `alembic/*`
+- title
+  - Strengthen privacy controls around profile/session/thread/export content
+  - why it matters
+    - Best-effort regex filtering is not enough for sensitive user evidence.
+  - severity
+    - high
+  - estimated effort
+    - M
+  - dependencies
+    - data classification policy
+  - exact files likely involved if identifiable
+    - `app/services/profile_service.py`
+    - `app/llm/redaction.py`
+    - `app/services/export_service.py`
+- title
+  - Add real deployment artifacts and documented environment contracts
+  - why it matters
+    - Deployment docs without manifests are not production-ready operations.
+  - severity
+    - high
+  - estimated effort
+    - M
+  - dependencies
+    - target platform decision
+  - exact files likely involved if identifiable
+    - new `Dockerfile`, compose/k8s manifests, CI/CD docs
+
+### Nice to have later
+- title
+  - Replace repo-wide `init_db()` calls with cleaner startup/session management
+  - why it matters
+    - Improves clarity and performance.
+  - severity
+    - medium
+  - estimated effort
+    - M
+  - dependencies
+    - migration strategy cleanup
+  - exact files likely involved if identifiable
+    - `app/db/repo/*`
+    - `app/db/connection.py`
+- title
+  - Add metrics export/tracing integration
+  - why it matters
+    - Improves production observability.
+  - severity
+    - medium
+  - estimated effort
+    - M
+  - dependencies
+    - ops stack choice
+  - exact files likely involved if identifiable
+    - `app/core/logging.py`
+    - `app/services/telemetry_service.py`
+    - deployment manifests
+- title
+  - Retire legacy compatibility paths and shim modules
+  - why it matters
+    - Reduces maintenance drag and ambiguous contracts.
+  - severity
+    - low
+  - estimated effort
+    - S
+  - dependencies
+    - client migration
+  - exact files likely involved if identifiable
+    - `app/adapters/usajobs/mapper.py`
+    - `app/api/v1/alerts.py`
+
+## 12. Recommended build order
+Provide the best next implementation order in phases.
+- Phase 1
+  - Stabilize runtime assumptions: sanitize startup env handling, document required env values, add actual deployment manifests, and harden auth boundary assumptions.
+- Phase 2
+  - Build the first real PathAdvisor deterministic intelligence modules: qualification evidence model, vacancy-to-evidence rule engine, and explanation provenance model.
+- Phase 3
+  - Replace snapshot stubs with real rule/artifact-backed implementations and connect them to the new evidence/provenance layer.
+- Phase 4
+  - Upgrade alert/delivery/privacy operations: real delivery decision, stronger privacy policy controls, clearer internal-vs-upstream audit semantics.
+- Phase 5
+  - Refine migration/persistence architecture and add production observability integrations.
+
+## Honest conclusion: Is the backend actually close?
+- Is this backend truly close to supporting PathOS as an intelligence product?
+  - Not yet.
+- Or is it mostly infrastructure/scaffolding with the core intelligence still missing?
+  - It is more than scaffolding, but the repo is still weighted toward trustworthy runtime infrastructure, contract support, and deterministic orchestration rather than a mature PathAdvisor intelligence brain.
+
+If intelligence is still missing, explicitly name the first 3 backend intelligence modules that should be built next.
+- Vacancy qualification engine
+  - Deterministically map vacancy requirements, specialized experience, grade expectations, and knockout conditions into scored qualification findings.
+- Evidence provenance engine
+  - Resolve exactly which profile/resume/session facts support or fail each rule and emit explanation lineage suitable for audits and UX.
+- Application decision engine
+  - Blend qualification, job match, readiness, and missing-evidence signals into a reproducible apply/consider/skip recommendation with calibrated confidence.

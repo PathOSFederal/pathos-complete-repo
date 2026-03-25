@@ -3521,3 +3521,572 @@ Directory listing excerpt:
 03/05/2026  04:39 PM             2,201 day-60-this-run.patch
 03/05/2026  04:39 PM           224,769 day-60.patch
 ```
+## 2026-03-25 - Backend Full Audit
+
+### Summary
+- Added the required backend audit artifacts:
+  - `docs/audits/backend-full-audit.md`
+  - `docs/audits/backend-gap-list.md`
+  - `docs/change-briefs/backend-audit.md`
+- Performed a production-readiness and architecture audit across API, deterministic logic, ingestion, persistence, worker flows, security/privacy, observability, testing, and deployment readiness.
+- Verified the repo has a large real test suite, but also identified a critical validation caveat: the ambient shell environment had `PATHOS_ENV=PROD`, which causes broad startup-validation failures. With `PATHOS_ENV=local`, the full suite passed.
+
+### Files changed
+- `docs/audits/backend-full-audit.md`
+- `docs/audits/backend-gap-list.md`
+- `docs/change-briefs/backend-audit.md`
+
+### Validation
+#### poetry install --with dev --no-root
+```text
+Installing dependencies from lock file
+Package operations: 48 installs, 0 updates, 0 removals
+... completed successfully
+```
+
+#### poetry run ruff check .
+```text
+All checks passed!
+```
+
+#### poetry run mypy .
+```text
+Success: no issues found in 232 source files
+```
+
+#### poetry run pytest -q
+```text
+Failed in current shell environment.
+Primary failure driver observed during audit:
+- ambient PATHOS_ENV=PROD
+- startup validation only accepts production/local/test/ci/staging/unknown/dev
+- result: broad create_app()/startup validation failures before normal API tests could execute
+- coverage gate then failed because the suite aborted into many early failures
+```
+
+#### $env:PATHOS_ENV='local'; poetry run pytest -q
+```text
+265 passed, 10 skipped in 178.67s (0:02:58)
+Required test coverage of 90% reached. Total coverage: 90.70%
+```
+
+### Required git state
+#### git status
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	new file:   docs/audits/backend-full-audit.md
+	new file:   docs/audits/backend-gap-list.md
+	new file:   docs/change-briefs/backend-audit.md
+	modified:   docs/merge-notes/current.md
+
+no changes added to commit (use "git add" and/or "git commit -a")
+```
+
+#### git branch --show-current
+```text
+main
+```
+
+#### git diff --name-status develop...HEAD
+```text
+fatal: ambiguous argument 'develop...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+```
+
+#### git diff --stat develop...HEAD
+```text
+fatal: ambiguous argument 'develop...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+```
+
+### Audit note on develop baseline
+- This repository currently has only `main` locally and `origin/main` remotely.
+- There is no local or remote `develop` ref available, so the exact required `develop...HEAD` commands fail in this repo state.
+- I logged the exact command output above rather than silently substituting a different baseline.
+
+### Working tree diff for this run
+#### git diff --name-status
+```text
+A	apps/pathos-platform/backend/docs/audits/backend-full-audit.md
+A	apps/pathos-platform/backend/docs/audits/backend-gap-list.md
+A	apps/pathos-platform/backend/docs/change-briefs/backend-audit.md
+M	apps/pathos-platform/backend/docs/merge-notes/current.md
+```
+
+#### git diff --stat
+```text
+ .../backend/docs/audits/backend-full-audit.md      | 562 +++++++++++++++++++++
+ .../backend/docs/audits/backend-gap-list.md        |  71 +++
+ .../backend/docs/change-briefs/backend-audit.md    |  51 ++
+ .../backend/docs/merge-notes/current.md            | 120 ++++-
+ 4 files changed, 803 insertions(+), 1 deletion(-)
+```
+
+### Patch artifacts
+Commands to run at end of audit:
+```powershell
+git diff develop...HEAD > artifacts/backend-audit.patch
+git diff > artifacts/backend-audit-this-run.patch
+bash -lc "ls -lh artifacts/backend-audit.patch artifacts/backend-audit-this-run.patch"
+```
+
+`bash -lc "ls -lh artifacts/backend-audit.patch artifacts/backend-audit-this-run.patch"` output:
+```text
+-rwxrwxrwx 1 joriel joriel 46K Mar 25 15:58 artifacts/backend-audit-this-run.patch
+-rwxrwxrwx 1 joriel joriel   0 Mar 25 15:58 artifacts/backend-audit.patch
+```
+## 2026-03-25 - Backend Completion Roadmap
+
+### Summary
+- Added the backend completion planning artifacts:
+  - `docs/audits/backend-completion-roadmap.md`
+  - `docs/audits/usajobs-ingestion-v1-plan.md`
+  - `docs/change-briefs/backend-completion-roadmap.md`
+- Mapped the current backend codebase to the next implementation phases:
+  - foundation hardening
+  - bounded USAJOBS ingestion v1
+  - deterministic qualification engine v1
+  - evidence provenance/explainability v1
+  - application decision + alert intelligence v1
+- Kept this run planning-only. No broad feature implementation was done.
+
+### Human Simulation Gate
+| Item | Value |
+|------|-------|
+| Required | No |
+| Triggers hit | none |
+| Why | planning/docs-only run in backend repo; no UI/store/browser runtime flow changed |
+
+### Files changed
+- `docs/audits/backend-completion-roadmap.md`
+- `docs/audits/usajobs-ingestion-v1-plan.md`
+- `docs/change-briefs/backend-completion-roadmap.md`
+- `docs/merge-notes/current.md`
+
+### Required git state
+#### git status
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	new file:   docs/audits/backend-full-audit.md
+	new file:   docs/audits/backend-gap-list.md
+	new file:   docs/change-briefs/backend-audit.md
+	modified:   docs/merge-notes/current.md
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	docs/audits/backend-completion-roadmap.md
+	docs/audits/usajobs-ingestion-v1-plan.md
+	docs/change-briefs/backend-completion-roadmap.md
+
+no changes added to commit (use "git add" and/or "git commit -a")
+```
+
+#### git branch --show-current
+```text
+main
+```
+
+#### git diff --name-status develop...HEAD
+```text
+fatal: ambiguous argument 'develop...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+```
+
+#### git diff --stat develop...HEAD
+```text
+fatal: ambiguous argument 'develop...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+```
+
+### Develop baseline note
+- `develop` still does not exist in this repo state, locally or as a fetched remote ref.
+- The required `develop...HEAD` commands therefore fail exactly as logged above.
+- I did not silently substitute another baseline.
+
+### Working tree diff after normalizing new files with intent-to-add
+#### git status --short
+```text
+ A docs/audits/backend-completion-roadmap.md
+ A docs/audits/backend-full-audit.md
+ A docs/audits/backend-gap-list.md
+ A docs/audits/usajobs-ingestion-v1-plan.md
+ A docs/change-briefs/backend-audit.md
+ A docs/change-briefs/backend-completion-roadmap.md
+ M docs/merge-notes/current.md
+```
+
+#### git diff --name-status
+```text
+A	apps/pathos-platform/backend/docs/audits/backend-completion-roadmap.md
+A	apps/pathos-platform/backend/docs/audits/backend-full-audit.md
+A	apps/pathos-platform/backend/docs/audits/backend-gap-list.md
+A	apps/pathos-platform/backend/docs/audits/usajobs-ingestion-v1-plan.md
+A	apps/pathos-platform/backend/docs/change-briefs/backend-audit.md
+A	apps/pathos-platform/backend/docs/change-briefs/backend-completion-roadmap.md
+M	apps/pathos-platform/backend/docs/merge-notes/current.md
+```
+
+#### git diff --stat
+```text
+ .../docs/audits/backend-completion-roadmap.md      | 295 +++++++++++
+ .../backend/docs/audits/backend-full-audit.md      | 562 +++++++++++++++++++++
+ .../backend/docs/audits/backend-gap-list.md        |  71 +++
+ .../docs/audits/usajobs-ingestion-v1-plan.md       | 140 +++++
+ .../backend/docs/change-briefs/backend-audit.md    |  51 ++
+ .../change-briefs/backend-completion-roadmap.md    |  47 ++
+ .../backend/docs/merge-notes/current.md            | 123 ++++-
+ 7 files changed, 1288 insertions(+), 1 deletion(-)
+```
+
+### Patch artifacts
+Commands:
+```powershell
+git diff develop...HEAD > artifacts/backend-completion-roadmap.patch
+git diff > artifacts/backend-completion-roadmap-this-run.patch
+bash -lc "ls -lh artifacts/backend-completion-roadmap.patch artifacts/backend-completion-roadmap-this-run.patch"
+```
+
+`bash -lc "ls -lh artifacts/backend-completion-roadmap.patch artifacts/backend-completion-roadmap-this-run.patch"` output:
+```text
+-rwxrwxrwx 1 joriel joriel 75K Mar 25 16:24 artifacts/backend-completion-roadmap-this-run.patch
+-rwxrwxrwx 1 joriel joriel   0 Mar 25 16:24 artifacts/backend-completion-roadmap.patch
+```
+## 2026-03-25 - Phase 1 Backend Foundation Hardening
+
+### Summary
+- Created and switched to `feature/backend-foundation-hardening-v1`.
+- Hardened API trust-boundary startup behavior so non-local API mode fails closed when `PATHOS_API_KEYS` is missing or obviously weak.
+- Normalized `PATHOS_ENV` handling so aliases like `PROD` resolve to `production`, and pytest no longer inherits accidental shell `PATHOS_ENV` state.
+- Gated deceptive placeholder runtime paths:
+  - `/api/v1/intelligence/*` contract-pack snapshot stubs are now local-only and explicitly labeled in responses/logs
+  - `email_digest_future` is now local-only and rejected outside local-style runtimes
+- Added minimal production-shaped deployment/config artifacts:
+  - `.env.example`
+  - `Dockerfile`
+  - `compose.yaml`
+- Added/update docs for startup guardrails and Phase 1 trust posture.
+
+### Human Simulation Gate
+| Item | Value |
+|------|-------|
+| Required | No |
+| Triggers hit | none |
+| Why | backend-only runtime/config/auth/deployment hardening; no UI/browser/store flow changed in this repo |
+
+### Files changed
+- `README.md`
+- `app/api/v1/alerts.py`
+- `app/api/v1/desktop.py`
+- `app/api/v1/intelligence.py`
+- `app/core/config.py`
+- `app/core/error_codes.py`
+- `app/core/runtime_guards.py`
+- `app/core/security.py`
+- `app/core/startup_validation.py`
+- `app/services/alert_rule_service.py`
+- `app/services/delivery_transport_service.py`
+- `tests/conftest.py`
+- `tests/test_auth.py`
+- `tests/test_health_readiness.py`
+- `tests/test_intelligence_snapshot_contract_pack_v1.py`
+- `tests/services/test_delivery_transport_service.py`
+- `tests/api/alerts/test__categories__alerts.py`
+- `.env.example`
+- `Dockerfile`
+- `compose.yaml`
+- `docs/change-briefs/backend-foundation-hardening.md`
+- `docs/ops/deployment-local-compose.md`
+- `docs/runbook/backend-runbook-v1.md`
+
+### Commands run
+#### git checkout -b feature/backend-foundation-hardening-v1
+```text
+Switched to a new branch 'feature/backend-foundation-hardening-v1'
+```
+
+#### poetry run ruff check app tests README.md
+```text
+All checks passed!
+```
+
+#### poetry run mypy app tests
+```text
+Success: no issues found in 218 source files
+```
+
+#### poetry run pytest -q tests/test_auth.py tests/test_health_readiness.py tests/services/test_delivery_transport_service.py tests/test_intelligence_snapshot_contract_pack_v1.py tests/api/alerts/test__categories__alerts.py
+```text
+39 passed
+ERROR: Coverage failure: total of 53 is less than fail-under=90
+```
+
+#### poetry run python -c "from app.main import create_app; app = create_app(mode='openapi'); print(app.title)"
+```text
+PathOS Backend
+```
+
+#### poetry run pytest -q
+```text
+273 passed, 10 skipped in 158.55s (0:02:38)
+Required test coverage of 90% reached. Total coverage: 90.70%
+```
+
+#### poetry run python scripts/export_openapi.py
+```text
+(completed successfully; no stdout)
+```
+
+### Results
+- Auth/config startup is stronger:
+  - non-local API startup now requires configured API keys
+  - short placeholder keys are rejected for non-local API startup
+- Runtime env handling is more explicit:
+  - `PROD` now normalizes to `production`
+  - pytest forces `PATHOS_ENV=test` in `tests/conftest.py` instead of inheriting shell state
+- Placeholder runtime behavior is now honest:
+  - intelligence snapshot stubs are unavailable outside local-style runtimes
+  - local responses include `X-PathOS-Intelligence-Status: stubbed-contract-v1-local-only`
+  - placeholder email delivery is blocked outside local-style runtimes
+- Deployment artifacts are materially better than before:
+  - config template added
+  - image build path added
+  - compose path for API + worker added
+
+### Known issues
+- Full repo status still includes unrelated frontend changes in the parent workspace. I did not touch or revert those files.
+- Auth remains shared-key based. Phase 1 hardened it materially, but it is not a full user/role authn/authz model.
+- Intelligence snapshot endpoints are still stubs; Phase 1 only gated/labeled them honestly.
+
+### Required git state
+#### git status
+```text
+On branch feature/backend-foundation-hardening-v1
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   README.md
+	modified:   app/api/v1/alerts.py
+	modified:   app/api/v1/desktop.py
+	modified:   app/api/v1/intelligence.py
+	modified:   app/core/config.py
+	modified:   app/core/error_codes.py
+	modified:   app/core/security.py
+	modified:   app/core/startup_validation.py
+	modified:   app/services/alert_rule_service.py
+	modified:   app/services/delivery_transport_service.py
+	new file:   docs/audits/backend-completion-roadmap.md
+	new file:   docs/audits/backend-full-audit.md
+	new file:   docs/audits/backend-gap-list.md
+	new file:   docs/audits/usajobs-ingestion-v1-plan.md
+	new file:   docs/change-briefs/backend-audit.md
+	new file:   docs/change-briefs/backend-completion-roadmap.md
+	modified:   docs/merge-notes/current.md
+	modified:   docs/ops/deployment-local-compose.md
+	modified:   docs/runbook/backend-runbook-v1.md
+	modified:   tests/api/alerts/test__categories__alerts.py
+	modified:   tests/conftest.py
+	modified:   tests/services/test_delivery_transport_service.py
+	modified:   tests/test_auth.py
+	modified:   tests/test_health_readiness.py
+	modified:   tests/test_intelligence_snapshot_contract_pack_v1.py
+	modified:   ../frontend/docs/merge-notes/current.md
+	modified:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	.dockerignore
+	Dockerfile
+	app/core/runtime_guards.py
+	compose.yaml
+	docs/change-briefs/backend-foundation-hardening.md
+	../frontend/docs/change-briefs/resume-builder-phase1.md
+	../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+
+no changes added to commit (use "git add" and/or "git commit -a")
+```
+
+#### git branch --show-current
+```text
+feature/backend-foundation-hardening-v1
+```
+
+#### git diff --name-status develop...HEAD
+```text
+fatal: ambiguous argument 'develop...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+```
+
+#### git diff --stat develop...HEAD
+```text
+fatal: ambiguous argument 'develop...HEAD': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+```
+
+### Develop baseline note
+- `develop` still does not exist in this repo state, so the required `develop...HEAD` commands fail exactly as logged above.
+- I did not silently substitute another baseline.
+
+### Working tree diff after intent-to-add normalization
+#### git status --short
+```text
+ A .dockerignore
+ A .env.example
+ A Dockerfile
+ M README.md
+ M app/api/v1/alerts.py
+ M app/api/v1/desktop.py
+ M app/api/v1/intelligence.py
+ M app/core/config.py
+ M app/core/error_codes.py
+ A app/core/runtime_guards.py
+ M app/core/security.py
+ M app/core/startup_validation.py
+ M app/services/alert_rule_service.py
+ M app/services/delivery_transport_service.py
+ A compose.yaml
+ A docs/audits/backend-completion-roadmap.md
+ A docs/audits/backend-full-audit.md
+ A docs/audits/backend-gap-list.md
+ A docs/audits/usajobs-ingestion-v1-plan.md
+ A docs/change-briefs/backend-audit.md
+ A docs/change-briefs/backend-completion-roadmap.md
+ A docs/change-briefs/backend-foundation-hardening.md
+ M docs/merge-notes/current.md
+ M docs/ops/deployment-local-compose.md
+ M docs/runbook/backend-runbook-v1.md
+ M tests/api/alerts/test__categories__alerts.py
+ M tests/conftest.py
+ M tests/services/test_delivery_transport_service.py
+ M tests/test_auth.py
+ M tests/test_health_readiness.py
+ M tests/test_intelligence_snapshot_contract_pack_v1.py
+ M ../frontend/docs/merge-notes/current.md
+ M ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+?? ../frontend/docs/change-briefs/resume-builder-phase1.md
+?? ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+```
+
+#### git diff --name-status
+```text
+A	apps/pathos-platform/backend/.dockerignore
+A	apps/pathos-platform/backend/.env.example
+A	apps/pathos-platform/backend/Dockerfile
+M	apps/pathos-platform/backend/README.md
+M	apps/pathos-platform/backend/app/api/v1/alerts.py
+M	apps/pathos-platform/backend/app/api/v1/desktop.py
+M	apps/pathos-platform/backend/app/api/v1/intelligence.py
+M	apps/pathos-platform/backend/app/core/config.py
+M	apps/pathos-platform/backend/app/core/error_codes.py
+A	apps/pathos-platform/backend/app/core/runtime_guards.py
+M	apps/pathos-platform/backend/app/core/security.py
+M	apps/pathos-platform/backend/app/core/startup_validation.py
+M	apps/pathos-platform/backend/app/services/alert_rule_service.py
+M	apps/pathos-platform/backend/app/services/delivery_transport_service.py
+A	apps/pathos-platform/backend/compose.yaml
+A	apps/pathos-platform/backend/docs/audits/backend-completion-roadmap.md
+A	apps/pathos-platform/backend/docs/audits/backend-full-audit.md
+A	apps/pathos-platform/backend/docs/audits/backend-gap-list.md
+A	apps/pathos-platform/backend/docs/audits/usajobs-ingestion-v1-plan.md
+A	apps/pathos-platform/backend/docs/change-briefs/backend-audit.md
+A	apps/pathos-platform/backend/docs/change-briefs/backend-completion-roadmap.md
+A	apps/pathos-platform/backend/docs/change-briefs/backend-foundation-hardening.md
+M	apps/pathos-platform/backend/docs/merge-notes/current.md
+M	apps/pathos-platform/backend/docs/ops/deployment-local-compose.md
+M	apps/pathos-platform/backend/docs/runbook/backend-runbook-v1.md
+M	apps/pathos-platform/backend/tests/api/alerts/test__categories__alerts.py
+M	apps/pathos-platform/backend/tests/conftest.py
+M	apps/pathos-platform/backend/tests/services/test_delivery_transport_service.py
+M	apps/pathos-platform/backend/tests/test_auth.py
+M	apps/pathos-platform/backend/tests/test_health_readiness.py
+M	apps/pathos-platform/backend/tests/test_intelligence_snapshot_contract_pack_v1.py
+M	apps/pathos-platform/frontend/docs/merge-notes/current.md
+M	apps/pathos-platform/frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+```
+
+#### git diff --stat
+```text
+ apps/pathos-platform/backend/.dockerignore         |   11 +
+ apps/pathos-platform/backend/.env.example          |   39 +
+ apps/pathos-platform/backend/Dockerfile            |   24 +
+ apps/pathos-platform/backend/README.md             |  131 +-
+ apps/pathos-platform/backend/app/api/v1/alerts.py  |    2 +
+ apps/pathos-platform/backend/app/api/v1/desktop.py |    4 +-
+ .../backend/app/api/v1/intelligence.py             |   26 +-
+ apps/pathos-platform/backend/app/core/config.py    |   44 +-
+ .../backend/app/core/error_codes.py                |    5 +
+ .../backend/app/core/runtime_guards.py             |   19 +
+ apps/pathos-platform/backend/app/core/security.py  |   13 +-
+ .../backend/app/core/startup_validation.py         |   31 +-
+ .../backend/app/services/alert_rule_service.py     |   15 +
+ .../app/services/delivery_transport_service.py     |   28 +-
+ apps/pathos-platform/backend/compose.yaml          |   47 +
+ .../docs/audits/backend-completion-roadmap.md      |  295 ++
+ .../backend/docs/audits/backend-full-audit.md      |  562 ++++
+ .../backend/docs/audits/backend-gap-list.md        |   71 +
+ .../docs/audits/usajobs-ingestion-v1-plan.md       |  140 +
+ .../backend/docs/change-briefs/backend-audit.md    |   51 +
+ .../change-briefs/backend-completion-roadmap.md    |   47 +
+ .../change-briefs/backend-foundation-hardening.md  |   33 +
+ .../backend/docs/merge-notes/current.md            |  246 +-
+ .../backend/docs/ops/deployment-local-compose.md   |   22 +
+ .../backend/docs/runbook/backend-runbook-v1.md     |   11 +
+ .../tests/api/alerts/test__categories__alerts.py   |   27 +
+ apps/pathos-platform/backend/tests/conftest.py     |    2 +-
+ .../services/test_delivery_transport_service.py    |   17 +-
+ apps/pathos-platform/backend/tests/test_auth.py    |   35 +
+ .../backend/tests/test_health_readiness.py         |   21 +
+ .../test_intelligence_snapshot_contract_pack_v1.py |   22 +
+ .../frontend/docs/merge-notes/current.md           |   67 +
+ .../ui/src/screens/ResumeBuilderScreen.tsx         | 2837 ++++++++++++++++----
+ 33 files changed, 4329 insertions(+), 616 deletions(-)
+```
+
+### Patch artifacts
+Commands:
+```powershell
+git diff develop...HEAD > artifacts/phase-1-backend-foundation-hardening.patch
+git diff > artifacts/phase-1-backend-foundation-hardening-this-run.patch
+bash -lc "ls -lh artifacts/phase-1-backend-foundation-hardening.patch artifacts/phase-1-backend-foundation-hardening-this-run.patch"
+```
+
+`bash -lc "ls -lh artifacts/phase-1-backend-foundation-hardening.patch artifacts/phase-1-backend-foundation-hardening-this-run.patch"` output:
+```text
+-rwxrwxrwx 1 joriel joriel 251K Mar 25 18:03 artifacts/phase-1-backend-foundation-hardening-this-run.patch
+-rwxrwxrwx 1 joriel joriel    0 Mar 25 18:03 artifacts/phase-1-backend-foundation-hardening.patch
+```
+
+### Phase 1 completion assessment
+- Completed
+  - non-local API startup now fails closed without real auth configuration
+  - placeholder delivery mode is local-only
+  - placeholder intelligence snapshot endpoints are local-only and explicitly labeled
+  - startup env handling is more reliable and `PATHOS_ENV=PROD` no longer poisons runtime/tests
+  - deployment/config artifacts are materially better than before
+- Partially open
+  - auth is still shared-key based rather than user/role scoped
+  - real external delivery is still not implemented
+  - real deterministic intelligence modules are still deferred
+- Exact next phase
+  - `git checkout -b feature/backend-usajobs-ingestion-v1`
+
+### End-of-run summary
+- Files changed: core config/security/startup, placeholder gating, tests, deployment docs/artifacts, merge-notes, change brief
+- Tests run: lint, mypy, targeted pytest subset, full pytest, openapi export
+- Phase 1 status: complete
+- Recommended next branch: `git checkout -b feature/backend-usajobs-ingestion-v1`

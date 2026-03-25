@@ -73,6 +73,7 @@ def test_career_readiness_endpoint_contract_and_determinism(monkeypatch) -> None
 
     assert first.status_code == 200
     assert second.status_code == 200
+    assert first.headers.get("X-PathOS-Intelligence-Status") == "stubbed-contract-v1-local-only"
     first_model = CareerReadinessSnapshot.model_validate(first.json())
     second_model = CareerReadinessSnapshot.model_validate(second.json())
     assert first_model.meta.rule_version == "snapshot-rules-v1"
@@ -100,6 +101,7 @@ def test_resume_readiness_endpoint_contract_and_determinism(monkeypatch) -> None
 
     assert first.status_code == 200
     assert second.status_code == 200
+    assert first.headers.get("X-PathOS-Intelligence-Status") == "stubbed-contract-v1-local-only"
     first_model = ResumeReadinessSnapshot.model_validate(first.json())
     second_model = ResumeReadinessSnapshot.model_validate(second.json())
     assert first_model.meta.rule_version == "snapshot-rules-v1"
@@ -127,6 +129,7 @@ def test_job_match_endpoint_contract_and_determinism(monkeypatch) -> None:
 
     assert first.status_code == 200
     assert second.status_code == 200
+    assert first.headers.get("X-PathOS-Intelligence-Status") == "stubbed-contract-v1-local-only"
     first_model = JobMatchSnapshot.model_validate(first.json())
     second_model = JobMatchSnapshot.model_validate(second.json())
     assert first_model.meta.rule_version == "snapshot-rules-v1"
@@ -170,9 +173,28 @@ def test_application_confidence_endpoint_contract_and_determinism(monkeypatch) -
 
     assert first.status_code == 200
     assert second.status_code == 200
+    assert first.headers.get("X-PathOS-Intelligence-Status") == "stubbed-contract-v1-local-only"
     first_model = ApplicationConfidenceSnapshot.model_validate(first.json())
     second_model = ApplicationConfidenceSnapshot.model_validate(second.json())
     assert first_model.meta.rule_version == "snapshot-rules-v1"
     assert first_model.meta.knowledge_pack_version == "career-pack-v1"
     assert first_model.meta.snapshot_id == second_model.meta.snapshot_id
     assert first_model.meta.input_hash == second_model.meta.input_hash
+
+
+def test_intelligence_snapshot_endpoints_are_disabled_outside_local_modes(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_ENV", "staging")
+    monkeypatch.setenv("PATHOS_API_KEYS", "production-api-key-1234")
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "intelligence_staging.db"))
+    app = create_app()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/intelligence/career-readiness",
+            json=_career_payload(),
+            headers={"Authorization": "Bearer production-api-key-1234"},
+        )
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["error"]["code"] == "FEATURE_NOT_READY"

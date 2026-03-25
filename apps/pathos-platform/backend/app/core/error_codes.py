@@ -46,6 +46,11 @@ ERROR_SPECS: dict[str, ErrorSpec] = {
         message="Runtime configuration validation failed at startup checks.",
         category="server_error",
     ),
+    "FEATURE_NOT_READY": ErrorSpec(
+        code="FEATURE_NOT_READY",
+        message="This runtime surface is intentionally disabled until production-ready behavior exists.",
+        category="server_error",
+    ),
     "DATABASE_UNAVAILABLE": ErrorSpec(
         code="DATABASE_UNAVAILABLE",
         message="Database is not reachable for readiness checks.",

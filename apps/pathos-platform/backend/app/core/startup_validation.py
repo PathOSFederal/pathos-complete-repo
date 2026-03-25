@@ -6,12 +6,14 @@ import logging
 from typing import Literal
 
 from app.core.config import (
+    get_api_keys,
     get_database_url,
     get_db_dialect,
     get_runtime_env,
     get_usajobs_api_key,
     get_usajobs_user_agent,
     get_worker_interval_seconds,
+    runtime_env_allows_open_auth,
 )
 from app.core.logging import log_event
 
@@ -19,10 +21,19 @@ logger = logging.getLogger("pathos.startup")
 
 StartupMode = Literal["api", "worker", "openapi"]
 ALLOWED_RUNTIME_ENVS = {"local", "test", "ci", "staging", "production", "unknown", "dev"}
+NON_LOCAL_SHARED_KEY_MIN_LENGTH = 16
 
 
 class StartupValidationError(RuntimeError):
     """Raised when deterministic startup configuration validation fails."""
+
+
+def _invalid_non_local_api_keys(api_keys: set[str]) -> list[str]:
+    invalid_keys: list[str] = []
+    for key in sorted(api_keys):
+        if len(key) < NON_LOCAL_SHARED_KEY_MIN_LENGTH:
+            invalid_keys.append(key)
+    return invalid_keys
 
 
 def validate_startup_config(*, mode: StartupMode, emit_success_event: bool = True) -> None:
@@ -55,11 +66,23 @@ def validate_startup_config(*, mode: StartupMode, emit_success_event: bool = Tru
         if not get_usajobs_user_agent().strip():
             missing_keys.append("USAJOBS_USER_AGENT")
 
+    if mode == "api" and not runtime_env_allows_open_auth(runtime_env):
+        api_keys = get_api_keys()
+        if not api_keys:
+            missing_keys.append("PATHOS_API_KEYS")
+        elif _invalid_non_local_api_keys(api_keys):
+            invalid_keys.append("PATHOS_API_KEYS")
+
     if mode == "worker" and get_worker_interval_seconds() < 1:
         invalid_keys.append("PATHOS_WORKER_INTERVAL_SECONDS")
 
     if missing_keys or invalid_keys:
-        details = {"mode": mode, "missing_keys": sorted(missing_keys), "invalid_keys": sorted(invalid_keys)}
+        details = {
+            "mode": mode,
+            "runtime_env": runtime_env,
+            "missing_keys": sorted(missing_keys),
+            "invalid_keys": sorted(invalid_keys),
+        }
         log_event(
             logger,
             level=logging.ERROR,
@@ -67,7 +90,11 @@ def validate_startup_config(*, mode: StartupMode, emit_success_event: bool = Tru
             message="Startup configuration validation failed. Set the missing and invalid environment variables, then restart the process.",
             details=details,
         )
-        raise StartupValidationError("Startup configuration validation failed.")
+        raise StartupValidationError(
+            "Startup configuration validation failed: "
+            f"mode={mode} runtime_env={runtime_env} "
+            f"missing_keys={sorted(missing_keys)} invalid_keys={sorted(invalid_keys)}"
+        )
 
     if emit_success_event:
         log_event(

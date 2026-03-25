@@ -3,6 +3,12 @@
 ## Scope
 This runbook covers operational actions for worker controls, migration safety, diagnostics, retention, and wipe workflows in beta environments.
 
+## Startup Guardrails
+1. Set `PATHOS_ENV` explicitly.
+2. For API startup in `staging`, `production`, or `unknown`, set `PATHOS_API_KEYS` to one or more non-placeholder secrets before boot.
+3. Set `USAJOBS_API_KEY` and `USAJOBS_USER_AGENT` for API and worker modes.
+4. If startup fails with `CONFIG_VALIDATION_FAILED`, correct the reported env keys before retrying.
+
 ## Start/Stop Worker (Ops Flags)
 1. Set `WORKER_ENABLED=true` to allow worker runs.
 2. Set `WORKER_ENABLED=false` to pause worker execution deterministically.
@@ -35,6 +41,11 @@ This runbook covers operational actions for worker controls, migration safety, d
 1. `GET /health/ready` for operational readiness.
 2. `GET /api/v1/diagnostics/snapshot` for safe runtime summary.
 3. Ensure responses contain no secrets and no raw upstream payload fields.
+
+## Placeholder Surface Policy
+1. `/api/v1/intelligence/*` snapshot endpoints are local-only contract stubs until real intelligence modules replace them.
+2. `email_digest_future` is a local-only placeholder delivery mode and must not be used as a staging/production delivery path.
+3. If either path is attempted outside local-style runtimes, treat that as a configuration issue rather than expected production behavior.
 
 ## Retention Cleanup
 1. Run:

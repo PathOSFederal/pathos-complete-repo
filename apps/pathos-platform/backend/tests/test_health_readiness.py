@@ -56,6 +56,27 @@ def test_create_app_openapi_mode_allows_missing_usajobs_env(monkeypatch) -> None
     assert app is not None
 
 
+def test_pathos_env_prod_alias_is_accepted_for_api_startup(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_ENV", "PROD")
+    monkeypatch.setenv("PATHOS_API_KEYS", "production-api-key-1234")
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "health_prod_alias.db"))
+
+    app = create_app()
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/desktop/info", headers={"Authorization": "Bearer production-api-key-1234"})
+
+    assert response.status_code == 200
+    assert response.json()["env"] == "production"
+
+
+def test_invalid_pathos_env_raises_clear_message(monkeypatch) -> None:
+    monkeypatch.setenv("PATHOS_ENV", "planet-x")
+
+    with pytest.raises(StartupValidationError, match="PATHOS_ENV"):
+        create_app()
+
+
 def test_health_live_returns_200_without_db_dependency(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("PATHOS_API_KEYS", raising=False)
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "health_live.db"))
