@@ -9,6 +9,12 @@ This backend is deployed as one image with two runtime commands:
 The API command uses Uvicorn factory mode so importing `app.main` does not create the app at import time.
 This keeps startup validation tied to actual runtime startup and allows OpenAPI export tooling to build the app in `openapi` mode without requiring runtime USAJOBS secrets.
 
+Repo artifacts added for this shape:
+
+- `Dockerfile`
+- `compose.yaml`
+- `.env.example`
+
 ## Required Environment Variables
 
 - `PATHOS_DB_PATH`
@@ -18,6 +24,12 @@ This keeps startup validation tied to actual runtime startup and allows OpenAPI 
 - `PATHOS_WORKER_INTERVAL_SECONDS` (worker loop interval in seconds)
 
 Both API and worker run strict startup checks. They validate configuration, database connectivity, and migration readiness before serving requests or processing alert runs.
+
+Additional API startup guardrails:
+
+- `PATHOS_API_KEYS` is required for non-local API startup (`staging`, `production`, `unknown`)
+- short placeholder API keys are rejected for non-local API startup
+- placeholder intelligence and email-delivery paths are not allowed outside `local`, `dev`, `test`, and `ci`
 
 ## Health Endpoints
 
@@ -38,3 +50,13 @@ Backward-compatible API-prefixed routes are also available under `/api/v1/health
 - Clients do not call USAJOBS directly.
 - Database should remain private to backend containers.
 - HTTPS termination and reverse proxy handling are outside this repository.
+
+## Compose Usage
+
+1. Copy `.env.example` to `.env`.
+2. Fill in real values for `PATHOS_API_KEYS`, `USAJOBS_API_KEY`, and `USAJOBS_USER_AGENT`.
+3. Start the stack:
+
+```bash
+docker compose up --build
+```

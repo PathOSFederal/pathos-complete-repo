@@ -8,10 +8,10 @@ from app.core.config import (
     get_alert_rule_min_interval_minutes,
     get_alert_run_lock_ttl_seconds,
     get_alert_run_max_jobs_scanned,
-    get_api_keys,
     get_base_url,
     get_runtime_env,
 )
+from app.core.security import api_auth_required
 from app.models.alert_digest import AlertDigestOut, DesktopLatestDigestOut, DesktopOverviewOut, GuardrailConfigOut
 from app.models.alert_rule import AlertRuleOut
 from app.models.saved_search import SavedSearchOut
@@ -28,7 +28,7 @@ def get_desktop_info() -> BackendInfo:
     return BackendInfo(
         version="0.1.0",
         env=get_runtime_env(),
-        authRequired=bool(get_api_keys()),
+        authRequired=api_auth_required(),
         baseUrl=get_base_url(),
         serverTime=datetime.now(timezone.utc),
     )

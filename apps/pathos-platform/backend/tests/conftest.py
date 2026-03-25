@@ -6,7 +6,7 @@ from pathlib import Path
 # Set before any test module imports app (config loads at first app import).
 os.environ.setdefault("USAJOBS_API_KEY", "test-key-for-pytest")
 os.environ.setdefault("USAJOBS_USER_AGENT", "PathOSAdvisor (test@pathosadvisor.com)")
-os.environ.setdefault("PATHOS_ENV", "test")
+os.environ["PATHOS_ENV"] = "test"
 os.environ["DB_DIALECT"] = "sqlite"
 
 ROOT = Path(__file__).resolve().parents[1]

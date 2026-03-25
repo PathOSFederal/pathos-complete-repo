@@ -136,6 +136,8 @@ def update_alert_rule(alert_rule_id: str, payload: AlertRuleUpdateRequest) -> Al
         return AlertRuleService.update(alert_rule_id, payload)
     except AlertRuleNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"code": "ALERT_RULE_NOT_FOUND"}) from exc
+    except AlertRuleValidationError as exc:
+        raise HTTPException(status_code=400, detail={"code": "BAD_REQUEST"}) from exc
 
 
 @router.delete("/alert-rules/{alert_rule_id}")

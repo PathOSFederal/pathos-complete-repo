@@ -23,6 +23,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Repo root: app/core/config.py -> app -> repo root
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_FILE = PROJECT_ROOT / ".env"
+LOCAL_RUNTIME_ENVS = {"local", "dev", "test", "ci"}
+RUNTIME_ENV_ALIASES = {
+    "prod": "production",
+    "production": "production",
+    "stage": "staging",
+    "staging": "staging",
+    "local": "local",
+    "dev": "dev",
+    "test": "test",
+    "ci": "ci",
+    "unknown": "unknown",
+}
 
 
 def _parse_int(value: str, fallback: int, minimum: int) -> int:
@@ -45,6 +57,15 @@ def _parse_float(value: str, fallback: float, minimum: float) -> float:
     if parsed < minimum:
         return minimum
     return parsed
+
+
+def normalize_runtime_env(value: str | None) -> str:
+    if value is None:
+        return "local"
+    normalized = value.strip().lower()
+    if not normalized:
+        return "local"
+    return RUNTIME_ENV_ALIASES.get(normalized, normalized)
 
 
 class Settings(BaseSettings):
@@ -198,6 +219,13 @@ class Settings(BaseSettings):
             return value
         return "sqlite"
 
+    @field_validator("PATHOS_ENV", mode="before")
+    @classmethod
+    def normalize_pathos_env(cls, v: str) -> str:
+        if not isinstance(v, str):
+            return "local"
+        return normalize_runtime_env(v)
+
 
 def _load_settings() -> Settings:
     """Load settings from env_file (and env vars). Used for singleton and refresh."""
@@ -248,7 +276,21 @@ def get_cors_origins() -> list[str]:
 def get_runtime_env() -> str:
     """Return runtime environment label used by desktop contract responses."""
     refresh_settings()
-    return settings.PATHOS_ENV
+    return normalize_runtime_env(settings.PATHOS_ENV)
+
+
+def runtime_env_allows_open_auth(runtime_env: str | None = None) -> bool:
+    resolved_env = normalize_runtime_env(
+        runtime_env if runtime_env is not None else get_runtime_env()
+    )
+    return resolved_env in LOCAL_RUNTIME_ENVS
+
+
+def runtime_env_allows_placeholder_runtime(runtime_env: str | None = None) -> bool:
+    resolved_env = normalize_runtime_env(
+        runtime_env if runtime_env is not None else get_runtime_env()
+    )
+    return resolved_env in LOCAL_RUNTIME_ENVS
 
 
 def get_base_url() -> str:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
+from app.core.runtime_guards import require_placeholder_runtime_allowed
 from app.intelligence.snapshots.engine import (
     compute_application_confidence,
     compute_career_readiness,
@@ -31,8 +32,8 @@ def _log_snapshot(
     request: Request, snapshot_kind: str, snapshot_id: str, input_hash: str
 ) -> None:
     request_id = getattr(request.state, "request_id", "missing-request-id")
-    message = "Deterministic snapshot generated."
-    logger.info(
+    message = "Deterministic snapshot generated from local-only contract-pack stub logic."
+    logger.warning(
         message,
         extra={
             "json_extra": {
@@ -42,6 +43,7 @@ def _log_snapshot(
                 "input_hash": input_hash,
                 "rule_version": "snapshot-rules-v1",
                 "knowledge_pack_version": "career-pack-v1",
+                "stubbed_contract_only": True,
                 "request_id": request_id,
             }
         },
@@ -50,8 +52,10 @@ def _log_snapshot(
 
 @router.post("/intelligence/career-readiness", response_model=CareerReadinessSnapshot)
 def career_readiness(
-    request: Request, payload: CareerReadinessRequest
+    request: Request, response: Response, payload: CareerReadinessRequest
 ) -> CareerReadinessSnapshot:
+    require_placeholder_runtime_allowed(feature_name="intelligence_snapshots_v1")
+    response.headers["X-PathOS-Intelligence-Status"] = "stubbed-contract-v1-local-only"
     snapshot = compute_career_readiness(payload)
     _log_snapshot(
         request=request,
@@ -64,8 +68,10 @@ def career_readiness(
 
 @router.post("/intelligence/resume-readiness", response_model=ResumeReadinessSnapshot)
 def resume_readiness(
-    request: Request, payload: ResumeReadinessRequest
+    request: Request, response: Response, payload: ResumeReadinessRequest
 ) -> ResumeReadinessSnapshot:
+    require_placeholder_runtime_allowed(feature_name="intelligence_snapshots_v1")
+    response.headers["X-PathOS-Intelligence-Status"] = "stubbed-contract-v1-local-only"
     snapshot = compute_resume_readiness(payload)
     _log_snapshot(
         request=request,
@@ -77,7 +83,11 @@ def resume_readiness(
 
 
 @router.post("/intelligence/job-match", response_model=JobMatchSnapshot)
-def job_match(request: Request, payload: JobMatchRequest) -> JobMatchSnapshot:
+def job_match(
+    request: Request, response: Response, payload: JobMatchRequest
+) -> JobMatchSnapshot:
+    require_placeholder_runtime_allowed(feature_name="intelligence_snapshots_v1")
+    response.headers["X-PathOS-Intelligence-Status"] = "stubbed-contract-v1-local-only"
     snapshot = compute_job_match(payload)
     _log_snapshot(
         request=request,
@@ -92,8 +102,10 @@ def job_match(request: Request, payload: JobMatchRequest) -> JobMatchSnapshot:
     "/intelligence/application-confidence", response_model=ApplicationConfidenceSnapshot
 )
 def application_confidence(
-    request: Request, payload: ApplicationConfidenceRequest
+    request: Request, response: Response, payload: ApplicationConfidenceRequest
 ) -> ApplicationConfidenceSnapshot:
+    require_placeholder_runtime_allowed(feature_name="intelligence_snapshots_v1")
+    response.headers["X-PathOS-Intelligence-Status"] = "stubbed-contract-v1-local-only"
     snapshot = compute_application_confidence(payload)
     _log_snapshot(
         request=request,

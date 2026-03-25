@@ -116,17 +116,22 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/health
 
 ### Auth
 
-`/api/v1/health` is always open. Everything else under `/api/v1/*` is protected when keys are configured.
+`/api/v1/health` is always open.
+Everything else under `/api/v1/*` is:
+
+* open only in explicit local-style runtimes: `local`, `dev`, `test`, `ci`
+* fail-closed in `staging`, `production`, and `unknown`
 
 * `PATHOS_API_KEYS`
 
-  * Comma-separated API keys (example: `desktop-dev-key,another-key`)
-  * If unset or empty, the API runs in open mode (not recommended outside dev)
+  * Comma-separated API keys
+  * required for `staging` and `production` API startup
+  * non-local keys must be non-trivial shared secrets; short placeholder keys are rejected at startup
 
 Example:
 
 ```bash
-export PATHOS_API_KEYS="desktop-dev-key"
+export PATHOS_API_KEYS="local-dev-api-key-1234"
 poetry run uvicorn app.main:create_app --factory --reload
 ```
 
@@ -176,8 +181,10 @@ export PATHOS_CORS_ORIGINS="http://localhost:5173"
 
 * `PATHOS_ENV`
 
-  * Used by `/api/v1/desktop/info`
-  * Default: `unknown`
+  * Used by `/api/v1/desktop/info` and startup guardrails
+  * Default: `local`
+  * Allowed values after normalization: `local`, `dev`, `test`, `ci`, `staging`, `production`, `unknown`
+  * `PROD` is normalized to `production`
 
 * `PATHOS_BASE_URL`
 
@@ -251,6 +258,19 @@ poetry run mypy app tests
 poetry run ruff check .
 poetry run mypy app tests
 poetry run pytest -q
+```
+
+### Run with Docker Compose
+
+1. Copy `.env.example` to `.env`
+2. Fill in real values for:
+   * `PATHOS_API_KEYS`
+   * `USAJOBS_API_KEY`
+   * `USAJOBS_USER_AGENT`
+3. Start API + worker:
+
+```bash
+docker compose up --build
 ```
 
 ### Run Alembic migrations (SQLite local)
@@ -331,6 +351,13 @@ Returns:
 * authRequired
 * baseUrl
 * serverTime
+
+### Intelligence snapshot endpoints
+
+The current `/api/v1/intelligence/*` snapshot endpoints remain contract-pack stubs.
+
+* In `local`, `dev`, `test`, and `ci`, they are available and return header `X-PathOS-Intelligence-Status: stubbed-contract-v1-local-only`
+* In `staging`, `production`, and `unknown`, they are disabled with a canonical `503 FEATURE_NOT_READY` response
 
 ---
 
@@ -427,6 +454,15 @@ poetry run python scripts/export_openapi.py
 
 ## Troubleshooting
 
+### Startup fails in staging or production
+
+Check:
+
+* `PATHOS_ENV` is set correctly
+* `PATHOS_API_KEYS` is present for API startup
+* each configured API key is a real secret, not a short placeholder
+* `USAJOBS_API_KEY` and `USAJOBS_USER_AGENT` are set for API and worker modes
+
 ### 401 or 403 on protected routes
 
 * 401: missing or malformed Authorization header.
@@ -451,6 +487,7 @@ Ensure:
 * Deterministic engine outputs are reproducible and auditable.
 * Optional narration must be validated and never override deterministic truth.
 * Secrets remain server-side. Desktop communicates through a controlled boundary.
+* Placeholder delivery and intelligence stub paths are local-only until production-ready implementations exist.
 
 ## Codex Automated Reviews and Autofix PRs (GitHub Actions)
 
