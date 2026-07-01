@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.domain.jobs.canonical_models import CanonicalCompensation, CanonicalJob, CanonicalSourceMetadata
 from app.main import create_app
 from app.models.job_search import JobSearchResponse
+from usajobs_execution_helper import execution_from_response
 
 
 def _search_response(job_ids: list[str]) -> JobSearchResponse:
@@ -43,6 +44,10 @@ def test_use_case__alerts_run_endpoint_is_idempotent(monkeypatch, tmp_path) -> N
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: _search_response(["J1"]),
     )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search_response(["J1"])),
+    )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp-fixed")
     app = create_app()
 
@@ -78,6 +83,7 @@ def test_negative__alerts_run_handles_upstream_failure(monkeypatch, tmp_path) ->
         raise JobSearchUpstreamUnavailableError("down")
 
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", _boom)
+    monkeypatch.setattr("app.services.job_search_service.JobSearchService.execute_search", _boom)
     app = create_app()
     with TestClient(app) as client:
         saved = client.post("/api/v1/saved-searches", json={"name": "S", "query": {"keyword": "analyst"}}).json()
@@ -128,6 +134,10 @@ def test_checkpoint_cursor_is_used_for_resume_decision(monkeypatch, tmp_path) ->
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: _search_response(["J1"]),
     )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search_response(["J1"])),
+    )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp-fixed")
     monkeypatch.setattr(
         "app.services.alerts_run_service.SavedSearchCheckpointService.determine_resume_cursor",
@@ -167,6 +177,10 @@ def test_alerts_rules_plural_create_enables_rule_evaluation_and_desktop_digest_v
     monkeypatch.setattr(
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: _search_response(["J1", "J2"]),
+    )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search_response(["J1", "J2"])),
     )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp-fixed")
     app = create_app()
@@ -243,6 +257,10 @@ def test_use_case__alerts_run_returns_empty_outcome_when_no_jobs_scanned(monkeyp
     monkeypatch.setattr(
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: _search_response([]),
+    )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search_response([])),
     )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp-fixed")
     app = create_app()

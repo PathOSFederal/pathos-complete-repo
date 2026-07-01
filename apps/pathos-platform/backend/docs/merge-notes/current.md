@@ -4090,3 +4090,435 @@ bash -lc "ls -lh artifacts/phase-1-backend-foundation-hardening.patch artifacts/
 - Tests run: lint, mypy, targeted pytest subset, full pytest, openapi export
 - Phase 1 status: complete
 - Recommended next branch: `git checkout -b feature/backend-usajobs-ingestion-v1`
+
+## 2026-03-25 - Phase 2 - Backend USAJOBS Ingestion v1
+
+### Summary of changes
+- Implemented bounded canonical USAJOBS persistence through saved-search and alert-run execution paths instead of leaving runtime job results transient.
+- Added warning-aware normalization and stronger provenance chaining: mapper version, upstream audit ID, upstream raw hash, query fingerprint, and bounded slice context now persist with ingested jobs.
+- Added a dedicated bounded ingestion repo/service pair and mirrored migration support in both portable SQL and Alembic.
+- Updated tests to target the new execution seam and added direct coverage for idempotent upsert behavior, official-source-only enforcement, mapper warning behavior, and provenance retention.
+- Updated README and added a non-technical change brief for this phase.
+
+### Files changed
+- `app/adapters/usajobs/normalize.py`
+- `app/services/job_search_service.py`
+- `app/services/saved_search_runner_service.py`
+- `app/services/alert_service.py`
+- `app/services/usajobs_ingestion_service.py`
+- `app/db/repo/upstream_audit_repo.py`
+- `app/db/repo/saved_search_repo.py`
+- `app/db/repo/saved_search_ingested_job_repo.py`
+- `app/db/migrations/013_saved_search_ingested_jobs_v1.sql`
+- `alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py`
+- `app/services/wipe_service.py`
+- `README.md`
+- `docs/change-briefs/backend-usajobs-ingestion-v1.md`
+- targeted test files under `tests/`
+
+### Commands run
+```powershell
+poetry run ruff check app tests README.md
+poetry run mypy app tests
+poetry run pytest -q tests\api\jobs\test__positive__normalize.py tests\db\repo\test_saved_search_ingested_job_repo.py tests\services\test_usajobs_ingestion_service.py tests\services\test_saved_search_runner_service.py tests\api\alerts\test__categories__alerts.py tests\api\alerts\test__categories__alerts_run_v1.py tests\api\alerts\test__categories__alerts_observability_v1.py tests\edge_case\test_edge_case_testing_hardening_v1.py tests\use_case\test_use_case_testing_hardening_v1.py
+poetry run pytest --no-cov -q tests\api\jobs\test__positive__normalize.py tests\db\repo\test_saved_search_ingested_job_repo.py tests\services\test_usajobs_ingestion_service.py tests\services\test_saved_search_runner_service.py tests\api\alerts\test__categories__alerts.py tests\api\alerts\test__categories__alerts_run_v1.py tests\api\alerts\test__categories__alerts_observability_v1.py tests\edge_case\test_edge_case_testing_hardening_v1.py tests\use_case\test_use_case_testing_hardening_v1.py
+poetry run pytest -q
+git status --short
+git branch --show-current
+git diff --name-status develop...HEAD
+git diff --stat develop...HEAD
+git diff develop...HEAD > artifacts/phase-2-backend-usajobs-ingestion.patch
+git diff > artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/phase-2-backend-usajobs-ingestion-this-run.patch"
+```
+
+### Results
+- `poetry run ruff check app tests README.md`
+  - passed
+- `poetry run mypy app tests`
+  - passed
+- targeted USAJOBS/ingestion pytest subset with coverage enabled
+  - behavior passed, but the repo coverage gate failed as expected for a partial slice run: `33 passed`, total coverage `63.23%`, below fail-under `90`
+- targeted USAJOBS/ingestion pytest subset without coverage
+  - passed: `33 passed in 53.52s`
+- full `poetry run pytest -q`
+  - passed: `278 passed, 10 skipped`
+  - coverage passed: `90.97%`
+- live USAJOBS verification requests made during this run
+  - `0`
+
+### Known issues
+- The feature branch already existed and was already checked out when this run started, so `git checkout -b feature/backend-usajobs-ingestion-v1` was not re-run.
+- `git diff develop...HEAD` is empty in this repo state because the Phase 2 work is still entirely uncommitted on the current feature branch. The cumulative patch file is therefore `0` bytes.
+- There are unrelated frontend worktree changes present in the parent repo. They were left untouched.
+- No live USAJOBS API verification call was used. The adapter path remains validated through fixtures/mocks plus the existing official-API client implementation.
+
+### Git state
+#### git status
+```text
+ M README.md
+ M app/adapters/usajobs/normalize.py
+ M app/db/repo/saved_search_repo.py
+ M app/db/repo/upstream_audit_repo.py
+ M app/services/alert_service.py
+ M app/services/job_search_service.py
+ M app/services/saved_search_runner_service.py
+ M app/services/wipe_service.py
+ M tests/api/alerts/test__categories__alerts.py
+ M tests/api/alerts/test__categories__alerts_observability_v1.py
+ M tests/api/alerts/test__categories__alerts_run_v1.py
+ M tests/api/jobs/test__positive__normalize.py
+ M tests/edge_case/test_edge_case_testing_hardening_v1.py
+ M tests/services/test_saved_search_runner_service.py
+ M tests/test_alembic_migrations.py
+ M tests/test_log_event_registry_and_schema.py
+ M tests/use_case/test_use_case_testing_hardening_v1.py
+ M ../frontend/docs/merge-notes/current.md
+ M ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+?? alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+?? app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+?? app/db/repo/saved_search_ingested_job_repo.py
+?? app/services/usajobs_ingestion_service.py
+?? docs/change-briefs/backend-usajobs-ingestion-v1.md
+?? tests/db/repo/test_saved_search_ingested_job_repo.py
+?? tests/services/test_usajobs_ingestion_service.py
+?? tests/usajobs_execution_helper.py
+?? ../frontend/docs/change-briefs/resume-builder-phase1.md
+?? ../frontend/docs/change-briefs/resume-builder-phase2.md
+?? ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+```
+
+#### git branch --show-current
+```text
+feature/backend-usajobs-ingestion-v1
+```
+
+#### git diff --name-status develop...HEAD
+```text
+```
+
+#### git diff --stat develop...HEAD
+```text
+```
+
+### Patch artifacts
+Commands:
+```powershell
+git diff develop...HEAD > artifacts/phase-2-backend-usajobs-ingestion.patch
+git diff > artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/phase-2-backend-usajobs-ingestion-this-run.patch"
+```
+
+`bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/phase-2-backend-usajobs-ingestion-this-run.patch"` output:
+```text
+-rwxrwxrwx 1 joriel joriel 244K Mar 25 18:50 artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+-rwxrwxrwx 1 joriel joriel    0 Mar 25 18:50 artifacts/phase-2-backend-usajobs-ingestion.patch
+```
+
+## Phase 2 completion assessment
+- Completed
+  - bounded official-USAJOBS ingestion now exists as a real runtime capability through saved-search and alert-run flows
+  - canonical mapping now emits deterministic warning metadata instead of silently flattening malformed upstream fields
+  - provenance is materially stronger: official source identity, mapper version, query fingerprint, upstream audit ID, upstream raw hash, and bounded slice context are preserved
+  - idempotent upsert behavior is implemented for bounded canonical records
+  - checkpoint and alert-run infrastructure now sits on stable canonical persistence instead of only transient search results
+- Partially open
+  - bounded ingestion is run-driven, not yet exposed through a dedicated operator-facing sync command or runbook section beyond README guidance
+  - no live quota-consuming integration proof was executed in this run, by design
+  - qualification and recommendation intelligence still do not exist; this phase only prepared the data foundation
+- Ready for Phase 3 deterministic qualification engine v1
+  - yes
+
+### End-of-run summary
+- Files changed: USAJOBS normalization, job-search execution, bounded ingestion repo/service/migrations, saved-search and alert-run ingestion hooks, tests, README, merge-notes, change brief
+- Tests run: ruff, mypy, targeted pytest subset with and without coverage, full pytest
+- Phase 2 status: complete
+- Recommended next branch: `git checkout -b feature/backend-qualification-engine-v1`
+
+## 2026-06-30 - Sync Job Staging Validation Slice
+
+### Summary
+- Added staging-safe USAJOBS sync validation support on top of the existing saved-search ingestion path.
+- Added `job_sync_runs` and `job_change_log` persistence for health and meaningful change tracking.
+- Added dry-run support that fetches and normalizes official USAJOBS data without writing staging records or upstream raw audit rows.
+- Added a bounded staging CLI for series `2210`, Florida, last 7 days, max 1-2 pages.
+- Added fixture tests for new ingestion, repeat idempotency, raw snapshot preservation, content hash behavior, canonical field comparison, salary/location/remote/closing-date/document/qualification changes, closed lifecycle handling, failed partition handling, duplicate prevention, and telework not being treated as fully remote.
+- Added staging runbook and non-technical change brief.
+
+### Human Simulation Gate
+| Item | Value |
+|------|-------|
+| Required | No |
+| Triggers hit | none |
+| Why | Backend sync, repository, CLI, and documentation work only; no browser UI, navigation, hydration, or localStorage flow changed. |
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API fetch -> JobSearchService normalization -> USAJobsIngestionService dry-run or bounded write -> saved_search_ingested_jobs/job_sync_runs/job_change_log -> ops health output |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Staging could misread duplicate, stale, changed, or closed jobs before production sync validation. |
+| How tested | Deterministic pytest fixtures, ruff, mypy, migration tests; full pytest attempted but timed out after 244 seconds. |
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run pytest -q tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py --cov=app --cov-fail-under=0
+Result: passed, 27 passed in 36.60s
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 224 source files
+
+poetry run pytest -q tests/test_alembic_migrations.py --cov=app --cov-fail-under=0
+Result: passed, 1 passed, 1 skipped in 7.15s
+
+poetry run pytest -q tests/test_migrations_runner.py --cov=app --cov-fail-under=0
+Result: passed, 3 passed in 8.79s
+
+poetry run pytest -q
+Result: not completed; command timed out after 244 seconds before returning output.
+```
+
+### Git Status
+```text
+On branch feature/backend-usajobs-ingestion-v1
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   README.md
+	new file:   alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+	modified:   app/adapters/usajobs/normalize.py
+	new file:   app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+	new file:   app/db/repo/saved_search_ingested_job_repo.py
+	modified:   app/db/repo/saved_search_repo.py
+	modified:   app/db/repo/upstream_audit_repo.py
+	modified:   app/services/alert_service.py
+	modified:   app/services/job_search_service.py
+	modified:   app/services/saved_search_runner_service.py
+	new file:   app/services/usajobs_ingestion_service.py
+	modified:   app/services/wipe_service.py
+	new file:   docs/change-briefs/backend-usajobs-ingestion-v1.md
+	modified:   docs/merge-notes/current.md
+	modified:   tests/api/alerts/test__categories__alerts.py
+	modified:   tests/api/alerts/test__categories__alerts_observability_v1.py
+	modified:   tests/api/alerts/test__categories__alerts_run_v1.py
+	modified:   tests/api/jobs/test__positive__normalize.py
+	new file:   tests/db/repo/test_saved_search_ingested_job_repo.py
+	modified:   tests/edge_case/test_edge_case_testing_hardening_v1.py
+	modified:   tests/services/test_saved_search_runner_service.py
+	new file:   tests/services/test_usajobs_ingestion_service.py
+	modified:   tests/test_alembic_migrations.py
+	modified:   tests/test_log_event_registry_and_schema.py
+	new file:   tests/usajobs_execution_helper.py
+	modified:   tests/use_case/test_use_case_testing_hardening_v1.py
+	new file:   ../frontend/docs/change-briefs/resume-builder-phase1.md
+	new file:   ../frontend/docs/change-briefs/resume-builder-phase2.md
+	new file:   ../frontend/docs/change-briefs/resume-builder-ux-compression.md
+	modified:   ../frontend/docs/merge-notes/current.md
+	new file:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+	modified:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+	new file:   ../../../restructure-safety/backend-path-status.txt
+	new file:   ../../../restructure-safety/backend-repo-branch.txt
+	new file:   ../../../restructure-safety/backend-repo-remotes.txt
+	new file:   ../../../restructure-safety/backend-repo-status.txt
+	new file:   ../../../restructure-safety/frontend-path-status.txt
+	new file:   ../../../restructure-safety/frontend-repo-branch.txt
+	new file:   ../../../restructure-safety/frontend-repo-remotes.txt
+	new file:   ../../../restructure-safety/frontend-repo-status.txt
+	new file:   ../../../restructure-safety/root-branch.txt
+	new file:   ../../../restructure-safety/root-full-status.txt
+	new file:   ../../../restructure-safety/root-log.txt
+	new file:   ../../../restructure-safety/root-remotes.txt
+	new file:   ../../../restructure-safety/root-status-after-split.txt
+	new file:   ../../../restructure-safety/root-status.txt
+	new file:   ../../../restructure-safety/snapshot-timestamp.txt
+	new file:   ../../../restructure-safety/split-validation-summary.json
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   README.md
+	modified:   alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+	modified:   app/api/v1/ops.py
+	modified:   app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+	new file:   app/db/repo/job_sync_run_repo.py
+	modified:   app/db/repo/saved_search_ingested_job_repo.py
+	modified:   app/models/job_search.py
+	modified:   app/services/job_search_service.py
+	modified:   app/services/usajobs_ingestion_service.py
+	new file:   docs/change-briefs/sync-job-staging-validation.md
+	new file:   docs/runbook/usajobs-sync-staging-validation.md
+	new file:   scripts/usajobs_staging_validation.py
+	modified:   tests/db/repo/test_saved_search_ingested_job_repo.py
+	modified:   tests/services/test_usajobs_ingestion_service.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	../../../usajobs-sync.env.ps1
+```
+
+### Branch
+```text
+feature/backend-usajobs-ingestion-v1
+```
+
+### git diff --name-status develop...HEAD
+```text
+
+```
+
+### git diff --stat develop...HEAD
+```text
+
+```
+
+### Patch Artifacts
+```text
+artifacts/sync-job-staging-validation.patch - 0 bytes
+artifacts/sync-job-staging-validation-this-run.patch - 83K
+```
+
+### Notes
+- `git diff develop...HEAD` is empty because this slice is uncommitted working-tree work layered on the current feature branch.
+- `git add -N .` was used before patch generation so new files are represented in `git diff` without committing.
+- Existing unrelated frontend and restructure-safety intent-to-add entries were already present in the broader worktree and were not modified for this slice.
+- No production scheduler setting was changed.
+- No live email delivery or external indexing submission was enabled.
+- No USAJOBS scraping was added.
+
+### Final git state refresh
+#### git status
+```text
+ M README.md
+ M app/adapters/usajobs/normalize.py
+ M app/db/repo/saved_search_repo.py
+ M app/db/repo/upstream_audit_repo.py
+ M app/services/alert_service.py
+ M app/services/job_search_service.py
+ M app/services/saved_search_runner_service.py
+ M app/services/wipe_service.py
+ M docs/merge-notes/current.md
+ M tests/api/alerts/test__categories__alerts.py
+ M tests/api/alerts/test__categories__alerts_observability_v1.py
+ M tests/api/alerts/test__categories__alerts_run_v1.py
+ M tests/api/jobs/test__positive__normalize.py
+ M tests/edge_case/test_edge_case_testing_hardening_v1.py
+ M tests/services/test_saved_search_runner_service.py
+ M tests/test_alembic_migrations.py
+ M tests/test_log_event_registry_and_schema.py
+ M tests/use_case/test_use_case_testing_hardening_v1.py
+ M ../frontend/docs/merge-notes/current.md
+ M ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+?? alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+?? app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+?? app/db/repo/saved_search_ingested_job_repo.py
+?? app/services/usajobs_ingestion_service.py
+?? docs/change-briefs/backend-usajobs-ingestion-v1.md
+?? tests/db/repo/test_saved_search_ingested_job_repo.py
+?? tests/services/test_usajobs_ingestion_service.py
+?? tests/usajobs_execution_helper.py
+?? ../frontend/docs/change-briefs/resume-builder-phase1.md
+?? ../frontend/docs/change-briefs/resume-builder-phase2.md
+?? ../frontend/docs/change-briefs/resume-builder-ux-compression.md
+?? ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+```
+
+#### patch artifact sizes
+```text
+-rwxrwxrwx 1 joriel joriel 257K Mar 25 18:52 artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+-rwxrwxrwx 1 joriel joriel    0 Mar 25 18:52 artifacts/phase-2-backend-usajobs-ingestion.patch
+```
+## 2026-07-01 - Day 46 Checkpoint And Production-Readiness Roadmap
+
+### Branch
+```text
+feature/backend-usajobs-ingestion-v1
+```
+
+### Scope
+- Checkpoint the current USAJOBS sync staging-validation slice without fixing the known review blockers.
+- Regenerate patch artifacts before commit.
+- Preserve the review verdict: not merge-ready.
+- Add `docs/roadmaps/usajobs-sync-production-readiness-days.md` for Day 47 through Day 56 follow-up work.
+- Make tiny documentation hygiene edits so the runbook and change brief do not overstate dry-run safety before Day 47.
+
+### Known Merge Blockers Preserved
+- Dry-run can still mutate staging on upstream error paths because upstream audit records may be written when `record_upstream_audit=False`.
+- Staging write mode is not environment-gated.
+- Alert/indexing behavior is documented as queue-only, but the implementation currently appears to store counters rather than persisted deduped queue rows.
+- Production canonical USAJOBS jobs do not yet prove all fields tested by fixture-only dictionaries.
+
+### Known Should-Fix Items Preserved
+- Dry-run output marks every fetched item as new and is weak for staging idempotency validation.
+- Remote/telework classification should prefer explicit USAJOBS remote indicators.
+- Closed-job handling must be guarded against partial partitions.
+- Health endpoint needs direct tests for auth, no-row, populated-row, and sanitized-error cases.
+- Schema integrity should be hardened with relationships, indexes, and constraints where appropriate.
+
+### Pre-Commit Git State
+```text
+git status
+Result: branch feature/backend-usajobs-ingestion-v1 with backend USAJOBS sync validation changes plus unrelated pre-existing staged frontend/restructure-safety files. Those unrelated files are intentionally excluded from this checkpoint commit.
+
+git branch --show-current
+Result: feature/backend-usajobs-ingestion-v1
+
+git diff --name-status
+Result: 15 backend slice files changed:
+M apps/pathos-platform/backend/README.md
+M apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+M apps/pathos-platform/backend/app/api/v1/ops.py
+M apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+A apps/pathos-platform/backend/app/db/repo/job_sync_run_repo.py
+M apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
+M apps/pathos-platform/backend/app/models/job_search.py
+M apps/pathos-platform/backend/app/services/job_search_service.py
+M apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
+A apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+A apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+A apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+M apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+
+git diff --stat
+Result: 15 files changed, 1555 insertions(+), 42 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 224 source files
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py -q --cov=app --cov-fail-under=0
+Result: passed, 27 passed in 39.35s
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 4 passed, 1 skipped in 16.33s
+
+poetry run pytest -q --maxfail=1
+Result: timed out after 248 seconds with no failure surfaced before timeout.
+Prior collection evidence: pytest collection previously completed and collected 297 tests.
+Recommended next narrow command: poetry run pytest --no-cov -vv --durations=20 --maxfail=1 tests
+```
+
+### Patch Artifacts Before Commit
+```text
+artifacts/sync-job-staging-validation.patch: 0 bytes
+artifacts/sync-job-staging-validation-this-run.patch: 84723 bytes
+```
+
+Note: the cumulative `develop...HEAD` artifact is 0 bytes before commit because the work is still uncommitted. Regenerate patch artifacts after the checkpoint commit.
+
+### Production-Readiness Roadmap
+- Added `docs/roadmaps/usajobs-sync-production-readiness-days.md`.
+- Next recommended continuation prompt: Day 47 dry-run safety and environment gates.
+
+### Merge Readiness
+- Status: not merge-ready.
+- Do not open a PR, merge, enable production scheduler changes, enable real email delivery, or enable external indexing submissions from this checkpoint.

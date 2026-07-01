@@ -11,6 +11,7 @@ from app.core.config import (
     get_pause_reason,
     get_worker_enabled,
 )
+from app.db.repo.job_sync_run_repo import JobSyncRunRepo
 
 router = APIRouter()
 
@@ -27,3 +28,10 @@ def ops_status() -> dict[str, object]:
         "pause_reason": pause_reason,
         "pause_reason_set": bool(pause_reason),
     }
+
+
+@router.get("/ops/usajobs-sync/health")
+def usajobs_sync_health() -> dict[str, object]:
+    """Expose staging-safe USAJOBS sync health without secrets or raw payloads."""
+
+    return JobSyncRunRepo.latest_health()

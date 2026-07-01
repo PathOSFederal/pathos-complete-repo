@@ -26,6 +26,7 @@ from app.models.job_search import JobSearchRequest
 from app.models.outcome import DomainOutcome, EmptyReason, SkipReason
 from app.services.job_search_service import JobSearchService
 from app.services.saved_search_service import SavedSearchNotFoundError
+from app.services.usajobs_ingestion_service import USAJobsIngestionService
 
 MAX_ALERT_JOB_IDS = 200
 logger = logging.getLogger("pathos.saved_search_run")
@@ -106,7 +107,17 @@ class AlertService:
                 skip_details="USAJOBS fetch skipped (missing env).",
             )
 
-        result = JobSearchService.search_jobs(search=search_request, request_id=request_id)
+        execution = JobSearchService.execute_search(
+            search=search_request,
+            request_id=request_id,
+            allow_cache=False,
+        )
+        result = execution.response
+        USAJobsIngestionService.ingest_saved_search_results(
+            saved_search_id=normalized_saved_search_id,
+            execution=execution,
+            trigger_mode="manual_saved_search_run",
+        )
 
         current_ids = sorted({row.id for row in result.results})
         previous = SavedSearchRepo.get_last_run(normalized_saved_search_id)
@@ -122,12 +133,12 @@ class AlertService:
                 "id": str(uuid4()),
                 "saved_search_id": normalized_saved_search_id,
                 "run_at": now,
-                "query_fingerprint": JobSearchService.fingerprint_params(search_request),
+                "query_fingerprint": execution.query_fingerprint,
                 "job_ids_json": json.dumps(current_ids, sort_keys=True),
                 "total": result.total,
                 "request_id": request_id,
-                # Deterministic trace hash from sorted IDs for quick integrity checks.
-                "upstream_trace_hash": JobSearchService.fingerprint_params(search_request),
+                "upstream_trace_hash": execution.upstream_raw_hash
+                or execution.query_fingerprint,
             }
         )
         SavedSearchRepo.set_last_run(normalized_saved_search_id, now)

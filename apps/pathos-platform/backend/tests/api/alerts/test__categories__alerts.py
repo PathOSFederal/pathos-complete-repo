@@ -14,6 +14,7 @@ from app.domain.jobs.canonical_models import CanonicalCompensation, CanonicalJob
 from app.main import create_app
 from app.models.job_search import JobSearchResponse
 from app.services.job_search_service import JobSearchUpstreamUnavailableError
+from usajobs_execution_helper import execution_from_response
 
 
 def _mk_response(ids: list[str]) -> JobSearchResponse:
@@ -42,7 +43,10 @@ def _mk_response(ids: list[str]) -> JobSearchResponse:
 def test_use_case__alerts_new_jobs_detected_on_second_run(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_use_case.db"))
     responses = iter([_mk_response(["A", "B"]), _mk_response(["A", "B", "C"])])
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: next(responses))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(next(responses)),
+    )
     app = create_app()
     with TestClient(app) as client:
         created = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}})
@@ -57,7 +61,10 @@ def test_misuse_case__alerts_rate_limit_when_enabled(monkeypatch, tmp_path) -> N
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_misuse.db"))
     monkeypatch.setenv("PATHOS_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setenv("PATHOS_RATE_LIMIT_RPM", "2")
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: _mk_response(["A"]))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_mk_response(["A"])),
+    )
     app = create_app()
     with TestClient(app) as client:
         saved_id = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}}).json()["id"]
@@ -71,7 +78,10 @@ def test_boundary__alerts_job_id_cap_applied(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_boundary.db"))
     big = [f"ID{i}" for i in range(250)]
     responses = iter([_mk_response([]), _mk_response(big)])
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: next(responses))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(next(responses)),
+    )
     app = create_app()
     with TestClient(app) as client:
         saved = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}}).json()["id"]
@@ -84,7 +94,10 @@ def test_boundary__alerts_job_id_cap_applied(monkeypatch, tmp_path) -> None:
 def test_equivalence__alerts_order_change_same_set_no_new_ids(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_equivalence.db"))
     responses = iter([_mk_response(["A", "B"]), _mk_response(["B", "A"])])
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: next(responses))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(next(responses)),
+    )
     app = create_app()
     with TestClient(app) as client:
         saved = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}}).json()["id"]
@@ -97,7 +110,10 @@ def test_equivalence__alerts_order_change_same_set_no_new_ids(monkeypatch, tmp_p
 def test_positive__alerts_ack_sets_timestamp(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_positive.db"))
     responses = iter([_mk_response([]), _mk_response(["A"])])
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: next(responses))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(next(responses)),
+    )
     app = create_app()
     with TestClient(app) as client:
         saved = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}}).json()["id"]
@@ -115,6 +131,10 @@ def test_negative__alerts_upstream_failure_does_not_mutate_last_run(monkeypatch,
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: (_ for _ in ()).throw(JobSearchUpstreamUnavailableError("down")),
     )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: (_ for _ in ()).throw(JobSearchUpstreamUnavailableError("down")),
+    )
     app = create_app()
     with TestClient(app) as client:
         saved = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}}).json()["id"]
@@ -127,7 +147,10 @@ def test_negative__alerts_upstream_failure_does_not_mutate_last_run(monkeypatch,
 def test_edge_case__alerts_duplicate_ids_are_deduped(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_edge.db"))
     responses = iter([_mk_response([]), _mk_response(["A", "A", "B", "B"])])
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: next(responses))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(next(responses)),
+    )
     app = create_app()
     with TestClient(app) as client:
         saved = client.post("/api/v1/saved-searches", json={"name": "S", "filters": {"keyword": "analyst"}}).json()["id"]
@@ -141,7 +164,10 @@ def test_saved_search_run_existing_uuid_does_not_return_not_found_and_logs_corre
     monkeypatch, tmp_path, caplog
 ) -> None:  # noqa: ANN001
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_saved_search_run_uuid.db"))
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: _mk_response(["A"]))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_mk_response(["A"])),
+    )
     app = create_app()
     caplog.set_level(logging.INFO, logger="pathos.saved_search_run")
 

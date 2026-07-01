@@ -1,0 +1,2062 @@
+diff --git a/apps/pathos-platform/backend/README.md b/apps/pathos-platform/backend/README.md
+index 3e94ca9..592a226 100644
+--- a/apps/pathos-platform/backend/README.md
++++ b/apps/pathos-platform/backend/README.md
+@@ -294,6 +294,19 @@ How to exercise it:
+ This is not a bulk backfill or warehouse sync. Broad harvesting, learning pipelines, and multi-page
+ collection remain intentionally deferred.
+ 
++### Validate USAJOBS sync safely in staging
++
++Use `docs/runbook/usajobs-sync-staging-validation.md` for the production-safe staging plan.
++
++The validation path supports:
++- dry-run fetch and normalization with no staging data writes
++- limited write mode for series `2210`, Florida, last 7 days, maximum 1-2 pages
++- repeat-run idempotency checks
++- `/api/v1/ops/usajobs-sync/health` sync health output
++- queue/accounting-only alert and indexing event counts
++
++Do not change production scheduler settings or enable real delivery/indexing for this validation pass.
++
+ ### Run Alembic migrations (SQLite local)
+ 
+ ```bash
+diff --git a/apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py b/apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+index 40408b9..94e4ce4 100644
+--- a/apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
++++ b/apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+@@ -31,9 +31,12 @@ def upgrade() -> None:
+         sa.Column("canonical_job_sha256", sa.Text(), nullable=False),
+         sa.Column("canonical_job_json", sa.Text(), nullable=False),
+         sa.Column("ingest_warnings_json", sa.Text(), nullable=False),
++        sa.Column("lifecycle_state", sa.Text(), nullable=False, server_default="open"),
++        sa.Column("closed_at", sa.Text(), nullable=True),
+         sa.Column("first_ingested_at", sa.Text(), nullable=False),
+         sa.Column("last_ingested_at", sa.Text(), nullable=False),
+         sa.Column("last_seen_at", sa.Text(), nullable=False),
++        sa.Column("last_changed_at", sa.Text(), nullable=False),
+         sa.Column("unchanged_run_count", sa.Integer(), nullable=False, server_default="0"),
+         sa.ForeignKeyConstraint(
+             ["saved_search_id"],
+@@ -59,9 +62,73 @@ def upgrade() -> None:
+         ["query_fingerprint"],
+         if_not_exists=True,
+     )
++    op.create_table(
++        "job_sync_runs",
++        sa.Column("id", sa.Text(), primary_key=True),
++        sa.Column("saved_search_id", sa.Text(), nullable=True),
++        sa.Column("source", sa.Text(), nullable=False),
++        sa.Column("trigger_mode", sa.Text(), nullable=False),
++        sa.Column("run_mode", sa.Text(), nullable=False),
++        sa.Column("status", sa.Text(), nullable=False),
++        sa.Column("started_at", sa.Text(), nullable=False),
++        sa.Column("completed_at", sa.Text(), nullable=False),
++        sa.Column("records_fetched", sa.Integer(), nullable=False),
++        sa.Column("new_jobs", sa.Integer(), nullable=False),
++        sa.Column("updated_jobs", sa.Integer(), nullable=False),
++        sa.Column("unchanged_jobs", sa.Integer(), nullable=False),
++        sa.Column("closed_jobs", sa.Integer(), nullable=False),
++        sa.Column("failed_partitions_json", sa.Text(), nullable=False),
++        sa.Column("stale_partitions_json", sa.Text(), nullable=False),
++        sa.Column("alert_events_queued", sa.Integer(), nullable=False),
++        sa.Column("indexing_events_queued", sa.Integer(), nullable=False),
++        sa.Column("duration_ms", sa.Integer(), nullable=False),
++        sa.Column("error_summary", sa.Text(), nullable=True),
++        sa.ForeignKeyConstraint(
++            ["saved_search_id"],
++            ["saved_searches.id"],
++            ondelete="SET NULL",
++        ),
++        if_not_exists=True,
++    )
++    op.create_table(
++        "job_change_log",
++        sa.Column("id", sa.Text(), primary_key=True),
++        sa.Column("sync_run_id", sa.Text(), nullable=True),
++        sa.Column("saved_search_id", sa.Text(), nullable=False),
++        sa.Column("job_id", sa.Text(), nullable=False),
++        sa.Column("change_type", sa.Text(), nullable=False),
++        sa.Column("changed_fields_json", sa.Text(), nullable=False),
++        sa.Column("previous_hash", sa.Text(), nullable=True),
++        sa.Column("new_hash", sa.Text(), nullable=True),
++        sa.Column("source_slice_json", sa.Text(), nullable=False),
++        sa.Column("upstream_audit_id", sa.Text(), nullable=True),
++        sa.Column("created_at", sa.Text(), nullable=False),
++        sa.ForeignKeyConstraint(
++            ["saved_search_id"],
++            ["saved_searches.id"],
++            ondelete="CASCADE",
++        ),
++        if_not_exists=True,
++    )
++    op.create_index(
++        "idx_job_sync_runs_completed",
++        "job_sync_runs",
++        ["completed_at"],
++        if_not_exists=True,
++    )
++    op.create_index(
++        "idx_job_change_log_search_created",
++        "job_change_log",
++        ["saved_search_id", "created_at"],
++        if_not_exists=True,
++    )
+ 
+ 
+ def downgrade() -> None:
++    op.drop_index("idx_job_change_log_search_created", table_name="job_change_log")
++    op.drop_index("idx_job_sync_runs_completed", table_name="job_sync_runs")
++    op.drop_table("job_change_log")
++    op.drop_table("job_sync_runs")
+     op.drop_index(
+         "idx_saved_search_ingested_jobs_query_fingerprint",
+         table_name="saved_search_ingested_jobs",
+diff --git a/apps/pathos-platform/backend/app/api/v1/ops.py b/apps/pathos-platform/backend/app/api/v1/ops.py
+index 564f239..277885a 100644
+--- a/apps/pathos-platform/backend/app/api/v1/ops.py
++++ b/apps/pathos-platform/backend/app/api/v1/ops.py
+@@ -11,6 +11,7 @@ from app.core.config import (
+     get_pause_reason,
+     get_worker_enabled,
+ )
++from app.db.repo.job_sync_run_repo import JobSyncRunRepo
+ 
+ router = APIRouter()
+ 
+@@ -27,3 +28,10 @@ def ops_status() -> dict[str, object]:
+         "pause_reason": pause_reason,
+         "pause_reason_set": bool(pause_reason),
+     }
++
++
++@router.get("/ops/usajobs-sync/health")
++def usajobs_sync_health() -> dict[str, object]:
++    """Expose staging-safe USAJOBS sync health without secrets or raw payloads."""
++
++    return JobSyncRunRepo.latest_health()
+diff --git a/apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql b/apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+index dcf91b4..f7a0a2f 100644
+--- a/apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql
++++ b/apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+@@ -15,16 +15,63 @@ CREATE TABLE IF NOT EXISTS saved_search_ingested_jobs (
+     canonical_job_sha256 TEXT NOT NULL,
+     canonical_job_json TEXT NOT NULL,
+     ingest_warnings_json TEXT NOT NULL,
++    lifecycle_state TEXT NOT NULL DEFAULT 'open',
++    closed_at TEXT NULL,
+     first_ingested_at TEXT NOT NULL,
+     last_ingested_at TEXT NOT NULL,
+     last_seen_at TEXT NOT NULL,
++    last_changed_at TEXT NOT NULL,
+     unchanged_run_count INTEGER NOT NULL DEFAULT 0,
+     UNIQUE(saved_search_id, job_id),
+     FOREIGN KEY(saved_search_id) REFERENCES saved_searches(id) ON DELETE CASCADE
+ );
+ 
++CREATE TABLE IF NOT EXISTS job_sync_runs (
++    id TEXT PRIMARY KEY,
++    saved_search_id TEXT NULL,
++    source TEXT NOT NULL,
++    trigger_mode TEXT NOT NULL,
++    run_mode TEXT NOT NULL,
++    status TEXT NOT NULL,
++    started_at TEXT NOT NULL,
++    completed_at TEXT NOT NULL,
++    records_fetched INTEGER NOT NULL,
++    new_jobs INTEGER NOT NULL,
++    updated_jobs INTEGER NOT NULL,
++    unchanged_jobs INTEGER NOT NULL,
++    closed_jobs INTEGER NOT NULL,
++    failed_partitions_json TEXT NOT NULL,
++    stale_partitions_json TEXT NOT NULL,
++    alert_events_queued INTEGER NOT NULL,
++    indexing_events_queued INTEGER NOT NULL,
++    duration_ms INTEGER NOT NULL,
++    error_summary TEXT NULL,
++    FOREIGN KEY(saved_search_id) REFERENCES saved_searches(id) ON DELETE SET NULL
++);
++
++CREATE TABLE IF NOT EXISTS job_change_log (
++    id TEXT PRIMARY KEY,
++    sync_run_id TEXT NULL,
++    saved_search_id TEXT NOT NULL,
++    job_id TEXT NOT NULL,
++    change_type TEXT NOT NULL,
++    changed_fields_json TEXT NOT NULL,
++    previous_hash TEXT NULL,
++    new_hash TEXT NULL,
++    source_slice_json TEXT NOT NULL,
++    upstream_audit_id TEXT NULL,
++    created_at TEXT NOT NULL,
++    FOREIGN KEY(saved_search_id) REFERENCES saved_searches(id) ON DELETE CASCADE
++);
++
+ CREATE INDEX IF NOT EXISTS idx_saved_search_ingested_jobs_search_seen
+     ON saved_search_ingested_jobs(saved_search_id, last_seen_at DESC);
+ 
+ CREATE INDEX IF NOT EXISTS idx_saved_search_ingested_jobs_query_fingerprint
+     ON saved_search_ingested_jobs(query_fingerprint);
++
++CREATE INDEX IF NOT EXISTS idx_job_sync_runs_completed
++    ON job_sync_runs(completed_at DESC);
++
++CREATE INDEX IF NOT EXISTS idx_job_change_log_search_created
++    ON job_change_log(saved_search_id, created_at DESC);
+diff --git a/apps/pathos-platform/backend/app/db/repo/job_sync_run_repo.py b/apps/pathos-platform/backend/app/db/repo/job_sync_run_repo.py
+new file mode 100644
+index 0000000..61a7537
+--- /dev/null
++++ b/apps/pathos-platform/backend/app/db/repo/job_sync_run_repo.py
+@@ -0,0 +1,134 @@
++"""Repository helpers for USAJOBS sync validation run summaries."""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++
++from app.db.connection import connect, init_db
++
++
++class JobSyncRunRepo:
++    """Persist and expose staging-safe sync run health records."""
++
++    @staticmethod
++    def create(record: dict[str, Any]) -> None:
++        """Insert one sync run summary row."""
++
++        init_db()
++        with connect() as conn:
++            conn.execute(
++                """
++                INSERT INTO job_sync_runs (
++                    id,
++                    saved_search_id,
++                    source,
++                    trigger_mode,
++                    run_mode,
++                    status,
++                    started_at,
++                    completed_at,
++                    records_fetched,
++                    new_jobs,
++                    updated_jobs,
++                    unchanged_jobs,
++                    closed_jobs,
++                    failed_partitions_json,
++                    stale_partitions_json,
++                    alert_events_queued,
++                    indexing_events_queued,
++                    duration_ms,
++                    error_summary
++                )
++                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++                """,
++                (
++                    record["id"],
++                    record.get("saved_search_id"),
++                    record["source"],
++                    record["trigger_mode"],
++                    record["run_mode"],
++                    record["status"],
++                    record["started_at"],
++                    record["completed_at"],
++                    int(record["records_fetched"]),
++                    int(record["new_jobs"]),
++                    int(record["updated_jobs"]),
++                    int(record["unchanged_jobs"]),
++                    int(record["closed_jobs"]),
++                    json.dumps(record.get("failed_partitions", []), sort_keys=True),
++                    json.dumps(record.get("stale_partitions", []), sort_keys=True),
++                    int(record["alert_events_queued"]),
++                    int(record["indexing_events_queued"]),
++                    int(record["duration_ms"]),
++                    record.get("error_summary"),
++                ),
++            )
++            conn.commit()
++
++    @staticmethod
++    def latest_health() -> dict[str, Any]:
++        """Return the latest sync health shape expected by staging operators."""
++
++        init_db()
++        with connect() as conn:
++            row = conn.execute(
++                """
++                SELECT
++                    id,
++                    saved_search_id,
++                    source,
++                    trigger_mode,
++                    run_mode,
++                    status,
++                    completed_at,
++                    records_fetched,
++                    new_jobs,
++                    updated_jobs,
++                    unchanged_jobs,
++                    closed_jobs,
++                    failed_partitions_json,
++                    stale_partitions_json,
++                    alert_events_queued,
++                    indexing_events_queued,
++                    duration_ms,
++                    error_summary
++                FROM job_sync_runs
++                ORDER BY completed_at DESC
++                LIMIT 1
++                """
++            ).fetchone()
++        if row is None:
++            return {
++                "last_sync_time": None,
++                "records_fetched": 0,
++                "new_jobs": 0,
++                "updated_jobs": 0,
++                "closed_jobs": 0,
++                "failed_partitions": [],
++                "stale_partitions": [],
++                "alert_events_queued": 0,
++                "indexing_events_queued": 0,
++                "duration_ms": 0,
++                "error_summary": None,
++            }
++
++        payload = dict(row)
++        return {
++            "last_sync_time": payload["completed_at"],
++            "records_fetched": int(payload["records_fetched"]),
++            "new_jobs": int(payload["new_jobs"]),
++            "updated_jobs": int(payload["updated_jobs"]),
++            "closed_jobs": int(payload["closed_jobs"]),
++            "failed_partitions": json.loads(payload["failed_partitions_json"]),
++            "stale_partitions": json.loads(payload["stale_partitions_json"]),
++            "alert_events_queued": int(payload["alert_events_queued"]),
++            "indexing_events_queued": int(payload["indexing_events_queued"]),
++            "duration_ms": int(payload["duration_ms"]),
++            "error_summary": payload.get("error_summary"),
++            "status": payload["status"],
++            "run_mode": payload["run_mode"],
++            "trigger_mode": payload["trigger_mode"],
++            "source": payload["source"],
++            "saved_search_id": payload.get("saved_search_id"),
++        }
+diff --git a/apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py b/apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
+index cdf0671..4d0f44a 100644
+--- a/apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
++++ b/apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import json
+ from hashlib import sha256
+ from typing import Any, Literal
++from uuid import uuid4
+ 
+ from app.db.connection import connect, init_db
+ 
+@@ -15,14 +16,109 @@ UpsertOutcome = Literal["new", "updated", "unchanged"]
+ class SavedSearchIngestedJobRepo:
+     """Store bounded canonical job records plus provenance for one saved search."""
+ 
++    @staticmethod
++    def _hashable_canonical_job(canonical_job: dict[str, Any]) -> dict[str, Any]:
++        """Remove source-observation fields that should not create false updates."""
++
++        normalized: dict[str, Any] = {}
++        for key, value in canonical_job.items():
++            if key == "source" and isinstance(value, dict):
++                source_payload: dict[str, Any] = {}
++                for source_key, source_value in value.items():
++                    if source_key != "retrieved_at":
++                        source_payload[source_key] = source_value
++                normalized[key] = source_payload
++                continue
++            normalized[key] = value
++        return normalized
++
+     @staticmethod
+     def _canonical_job_json(canonical_job: dict[str, Any]) -> str:
+-        return json.dumps(canonical_job, sort_keys=True, separators=(",", ":"))
++        comparable = SavedSearchIngestedJobRepo._hashable_canonical_job(canonical_job)
++        return json.dumps(comparable, sort_keys=True, separators=(",", ":"))
+ 
+     @staticmethod
+     def _job_hash(canonical_job_json: str) -> str:
+         return sha256(canonical_job_json.encode("utf-8")).hexdigest()
+ 
++    @staticmethod
++    def _stored_job_json(canonical_job: dict[str, Any]) -> str:
++        return json.dumps(canonical_job, sort_keys=True, separators=(",", ":"))
++
++    @staticmethod
++    def _changed_fields(
++        previous_job: dict[str, Any],
++        next_job: dict[str, Any],
++    ) -> list[str]:
++        """Return canonical fields that changed in ways operators care about."""
++
++        comparable_fields = [
++            "title",
++            "organization",
++            "locations",
++            "compensation",
++            "open_date",
++            "close_date",
++            "apply_url",
++            "remote_status",
++            "documents",
++            "qualifications",
++        ]
++        changed: list[str] = []
++        for field_name in comparable_fields:
++            previous_value = previous_job.get(field_name)
++            next_value = next_job.get(field_name)
++            if previous_value != next_value:
++                changed.append(field_name)
++        return changed
++
++    @staticmethod
++    def _insert_change_log(
++        conn,
++        *,
++        sync_run_id: str | None,
++        saved_search_id: str,
++        job_id: str,
++        change_type: str,
++        changed_fields: list[str],
++        previous_hash: str | None,
++        new_hash: str | None,
++        source_slice_json: str,
++        upstream_audit_id: str | None,
++        created_at: str,
++    ) -> None:
++        conn.execute(
++            """
++            INSERT INTO job_change_log (
++                id,
++                sync_run_id,
++                saved_search_id,
++                job_id,
++                change_type,
++                changed_fields_json,
++                previous_hash,
++                new_hash,
++                source_slice_json,
++                upstream_audit_id,
++                created_at
++            )
++            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++            """,
++            (
++                str(uuid4()),
++                sync_run_id,
++                saved_search_id,
++                job_id,
++                change_type,
++                json.dumps(changed_fields, sort_keys=True),
++                previous_hash,
++                new_hash,
++                source_slice_json,
++                upstream_audit_id,
++                created_at,
++            ),
++        )
++
+     @staticmethod
+     def list_by_saved_search(saved_search_id: str) -> list[dict[str, Any]]:
+         init_db()
+@@ -42,9 +138,12 @@ class SavedSearchIngestedJobRepo:
+                     canonical_job_sha256,
+                     canonical_job_json,
+                     ingest_warnings_json,
++                    lifecycle_state,
++                    closed_at,
+                     first_ingested_at,
+                     last_ingested_at,
+                     last_seen_at,
++                    last_changed_at,
+                     unchanged_run_count
+                 FROM saved_search_ingested_jobs
+                 WHERE saved_search_id = ?
+@@ -69,16 +168,24 @@ class SavedSearchIngestedJobRepo:
+         canonical_job: dict[str, Any],
+         ingest_warnings: list[str] | tuple[str, ...],
+         seen_at: str,
++        sync_run_id: str | None = None,
+     ) -> UpsertOutcome:
+         canonical_job_json = SavedSearchIngestedJobRepo._canonical_job_json(canonical_job)
+         canonical_job_sha256 = SavedSearchIngestedJobRepo._job_hash(canonical_job_json)
++        stored_job_json = SavedSearchIngestedJobRepo._stored_job_json(canonical_job)
+         source_slice_json = json.dumps(source_slice, sort_keys=True, separators=(",", ":"))
+         warnings_json = json.dumps(sorted(set(str(item) for item in ingest_warnings)), sort_keys=True)
+         init_db()
+         with connect() as conn:
+             existing = conn.execute(
+                 """
+-                SELECT id, canonical_job_sha256, unchanged_run_count, first_ingested_at
++                SELECT
++                    id,
++                    canonical_job_sha256,
++                    canonical_job_json,
++                    unchanged_run_count,
++                    first_ingested_at,
++                    lifecycle_state
+                 FROM saved_search_ingested_jobs
+                 WHERE saved_search_id = ? AND job_id = ?
+                 """,
+@@ -100,12 +207,15 @@ class SavedSearchIngestedJobRepo:
+                         canonical_job_sha256,
+                         canonical_job_json,
+                         ingest_warnings_json,
++                        lifecycle_state,
++                        closed_at,
+                         first_ingested_at,
+                         last_ingested_at,
+                         last_seen_at,
++                        last_changed_at,
+                         unchanged_run_count
+                     )
+-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     """,
+                     (
+                         record_id,
+@@ -118,14 +228,30 @@ class SavedSearchIngestedJobRepo:
+                         upstream_audit_id,
+                         upstream_raw_hash,
+                         canonical_job_sha256,
+-                        canonical_job_json,
++                        stored_job_json,
+                         warnings_json,
++                        "open",
++                        None,
++                        seen_at,
+                         seen_at,
+                         seen_at,
+                         seen_at,
+                         0,
+                     ),
+                 )
++                SavedSearchIngestedJobRepo._insert_change_log(
++                    conn,
++                    sync_run_id=sync_run_id,
++                    saved_search_id=saved_search_id,
++                    job_id=job_id,
++                    change_type="new",
++                    changed_fields=SavedSearchIngestedJobRepo._changed_fields({}, canonical_job),
++                    previous_hash=None,
++                    new_hash=canonical_job_sha256,
++                    source_slice_json=source_slice_json,
++                    upstream_audit_id=upstream_audit_id,
++                    created_at=seen_at,
++                )
+                 conn.commit()
+                 return "new"
+ 
+@@ -134,9 +260,17 @@ class SavedSearchIngestedJobRepo:
+             if previous_hash == canonical_job_sha256:
+                 outcome: UpsertOutcome = "unchanged"
+                 next_unchanged_count = unchanged_count + 1
++                changed_fields: list[str] = []
++                last_changed_at = None
+             else:
+                 outcome = "updated"
+                 next_unchanged_count = 0
++                previous_job = json.loads(str(existing["canonical_job_json"]))
++                changed_fields = SavedSearchIngestedJobRepo._changed_fields(
++                    previous_job,
++                    canonical_job,
++                )
++                last_changed_at = seen_at
+             conn.execute(
+                 """
+                 UPDATE saved_search_ingested_jobs
+@@ -150,8 +284,14 @@ class SavedSearchIngestedJobRepo:
+                     canonical_job_sha256 = ?,
+                     canonical_job_json = ?,
+                     ingest_warnings_json = ?,
++                    lifecycle_state = ?,
++                    closed_at = ?,
+                     last_ingested_at = ?,
+                     last_seen_at = ?,
++                    last_changed_at = CASE
++                        WHEN ? IS NULL THEN last_changed_at
++                        ELSE ?
++                    END,
+                     unchanged_run_count = ?
+                 WHERE saved_search_id = ? AND job_id = ?
+                 """,
+@@ -163,14 +303,146 @@ class SavedSearchIngestedJobRepo:
+                     upstream_audit_id,
+                     upstream_raw_hash,
+                     canonical_job_sha256,
+-                    canonical_job_json,
++                    stored_job_json,
+                     warnings_json,
++                    "open",
++                    None,
+                     seen_at,
+                     seen_at,
++                    last_changed_at,
++                    last_changed_at,
+                     next_unchanged_count,
+                     saved_search_id,
+                     job_id,
+                 ),
+             )
++            if outcome == "updated":
++                SavedSearchIngestedJobRepo._insert_change_log(
++                    conn,
++                    sync_run_id=sync_run_id,
++                    saved_search_id=saved_search_id,
++                    job_id=job_id,
++                    change_type="updated",
++                    changed_fields=changed_fields,
++                    previous_hash=previous_hash,
++                    new_hash=canonical_job_sha256,
++                    source_slice_json=source_slice_json,
++                    upstream_audit_id=upstream_audit_id,
++                    created_at=seen_at,
++                )
+             conn.commit()
+             return outcome
++
++    @staticmethod
++    def preview_outcome(
++        *,
++        saved_search_id: str,
++        job_id: str,
++        canonical_job: dict[str, Any],
++    ) -> UpsertOutcome:
++        """Classify an ingest outcome without writing any staging data."""
++
++        canonical_job_json = SavedSearchIngestedJobRepo._canonical_job_json(canonical_job)
++        canonical_job_sha256 = SavedSearchIngestedJobRepo._job_hash(canonical_job_json)
++        init_db()
++        with connect() as conn:
++            existing = conn.execute(
++                """
++                SELECT canonical_job_sha256
++                FROM saved_search_ingested_jobs
++                WHERE saved_search_id = ? AND job_id = ?
++                """,
++                (saved_search_id, job_id),
++            ).fetchone()
++        if existing is None:
++            return "new"
++        if str(existing["canonical_job_sha256"]) == canonical_job_sha256:
++            return "unchanged"
++        return "updated"
++
++    @staticmethod
++    def mark_missing_as_closed(
++        *,
++        saved_search_id: str,
++        seen_job_ids: list[str],
++        closed_at: str,
++        source_slice: dict[str, Any],
++        upstream_audit_id: str | None,
++        sync_run_id: str | None = None,
++    ) -> int:
++        """Close jobs absent from a complete partition and log lifecycle changes."""
++
++        source_slice_json = json.dumps(source_slice, sort_keys=True, separators=(",", ":"))
++        init_db()
++        with connect() as conn:
++            rows = conn.execute(
++                """
++                SELECT job_id, canonical_job_sha256
++                FROM saved_search_ingested_jobs
++                WHERE saved_search_id = ? AND lifecycle_state = 'open'
++                """,
++                (saved_search_id,),
++            ).fetchall()
++            seen_ids = set(seen_job_ids)
++            closed_count = 0
++            for row in rows:
++                job_id = str(row["job_id"])
++                if job_id in seen_ids:
++                    continue
++                previous_hash = str(row["canonical_job_sha256"])
++                conn.execute(
++                    """
++                    UPDATE saved_search_ingested_jobs
++                    SET
++                        lifecycle_state = 'closed',
++                        closed_at = ?,
++                        last_ingested_at = ?,
++                        last_changed_at = ?
++                    WHERE saved_search_id = ? AND job_id = ?
++                    """,
++                    (closed_at, closed_at, closed_at, saved_search_id, job_id),
++                )
++                SavedSearchIngestedJobRepo._insert_change_log(
++                    conn,
++                    sync_run_id=sync_run_id,
++                    saved_search_id=saved_search_id,
++                    job_id=job_id,
++                    change_type="closed",
++                    changed_fields=["lifecycle_state"],
++                    previous_hash=previous_hash,
++                    new_hash=previous_hash,
++                    source_slice_json=source_slice_json,
++                    upstream_audit_id=upstream_audit_id,
++                    created_at=closed_at,
++                )
++                closed_count += 1
++            conn.commit()
++            return closed_count
++
++    @staticmethod
++    def list_change_log(saved_search_id: str) -> list[dict[str, Any]]:
++        """Return change-log rows for deterministic tests and operator checks."""
++
++        init_db()
++        with connect() as conn:
++            rows = conn.execute(
++                """
++                SELECT
++                    id,
++                    sync_run_id,
++                    saved_search_id,
++                    job_id,
++                    change_type,
++                    changed_fields_json,
++                    previous_hash,
++                    new_hash,
++                    source_slice_json,
++                    upstream_audit_id,
++                    created_at
++                FROM job_change_log
++                WHERE saved_search_id = ?
++                ORDER BY created_at ASC, job_id ASC, change_type ASC
++                """,
++                (saved_search_id,),
++            ).fetchall()
++        return [dict(row) for row in rows]
+diff --git a/apps/pathos-platform/backend/app/models/job_search.py b/apps/pathos-platform/backend/app/models/job_search.py
+index f3ede46..885e59a 100644
+--- a/apps/pathos-platform/backend/app/models/job_search.py
++++ b/apps/pathos-platform/backend/app/models/job_search.py
+@@ -48,6 +48,7 @@ class JobSearchRequest(BaseModel):
+     appointment_type: str | None = Field(default=None, max_length=30)
+     work_schedule: str | None = Field(default=None, max_length=30)
+     salary_min: int | None = Field(default=None, ge=0)
++    date_posted_days: int | None = Field(default=None, ge=1, le=30)
+     page: int = Field(default=1, ge=1)
+     page_size: int = Field(default=20, ge=1, le=100)
+ 
+diff --git a/apps/pathos-platform/backend/app/services/job_search_service.py b/apps/pathos-platform/backend/app/services/job_search_service.py
+index 62973a1..90fd62c 100644
+--- a/apps/pathos-platform/backend/app/services/job_search_service.py
++++ b/apps/pathos-platform/backend/app/services/job_search_service.py
+@@ -21,6 +21,7 @@ from hashlib import sha256
+ import logging
+ import time
+ from typing import Any
++from typing import Protocol
+ from uuid import uuid4
+ 
+ from app.adapters.usajobs.client import USAJobsClient
+@@ -32,6 +33,7 @@ from app.adapters.usajobs.errors import (
+     UpstreamUnavailableError,
+ )
+ from app.adapters.usajobs.models import USAJobsEnvelope
++from app.adapters.usajobs.types import USAJobsSearchResponse
+ from app.adapters.usajobs.normalize import (
+     USAJOBS_MAPPER_VERSION,
+     NormalizedUSAJobsItem,
+@@ -69,6 +71,13 @@ class JobSearchRateLimitedError(Exception):
+     """Raised when upstream responds with rate-limit status."""
+ 
+ 
++class USAJobsSearchClient(Protocol):
++    """Minimal official-API client seam used by tests and staging validation."""
++
++    def search_jobs(self, query_params: dict[str, Any]) -> USAJobsSearchResponse:
++        """Execute one official USAJOBS search request."""
++
++
+ @dataclass(frozen=True)
+ class JobSearchExecutionResult:
+     """Full search execution output for bounded ingestion and audit use."""
+@@ -169,6 +178,8 @@ class JobSearchService:
+             params["WorkSchedule"] = search.work_schedule.strip()
+         if search.salary_min is not None:
+             params["MinimumSalary"] = search.salary_min
++        if search.date_posted_days is not None:
++            params["DatePosted"] = search.date_posted_days
+         return params
+ 
+     @staticmethod
+@@ -229,11 +240,18 @@ class JobSearchService:
+     def execute_search(
+         search: JobSearchRequest,
+         request_id: str,
+-        client: USAJobsClient | None = None,
++        client: USAJobsSearchClient | None = None,
+         *,
+         allow_cache: bool = True,
++        record_upstream_audit: bool = True,
+     ) -> JobSearchExecutionResult:
+-        """Perform deterministic job search and return audit/provenance metadata."""
++        """Perform deterministic job search and return audit/provenance metadata.
++
++        The staging validation dry-run path sets `record_upstream_audit=False` so
++        it can fetch, validate, and normalize official USAJOBS responses without
++        mutating staging data. Normal API and worker paths keep the default audit
++        write so raw source snapshots remain preserved for real ingestions.
++        """
+ 
+         env_presence = JobSearchService.usajobs_log_env_presence()
+         if not JobSearchService.usajobs_configured():
+@@ -267,18 +285,26 @@ class JobSearchService:
+         upstream_raw_hash: str | None = None
+         try:
+             upstream = adapter.search_jobs(query_params=query_params)
+-            upstream_record = JobSearchService._record_upstream_audit(
+-                request_id=request_id,
+-                endpoint=upstream.audit.endpoint,
+-                query_hash=upstream.audit.query_hash,
+-                status_code=upstream.audit.status_code,
+-                latency_ms=upstream.audit.latency_ms,
+-                result_count=upstream.audit.result_count,
+-                error_class=upstream.audit.error_class,
+-                upstream_raw_payload=upstream.payload,
+-            )
+-            upstream_audit_id = upstream_record.get("id")
+-            upstream_raw_hash = upstream_record.get("upstream_raw_hash")
++            if record_upstream_audit:
++                upstream_record = JobSearchService._record_upstream_audit(
++                    request_id=request_id,
++                    endpoint=upstream.audit.endpoint,
++                    query_hash=upstream.audit.query_hash,
++                    status_code=upstream.audit.status_code,
++                    latency_ms=upstream.audit.latency_ms,
++                    result_count=upstream.audit.result_count,
++                    error_class=upstream.audit.error_class,
++                    upstream_raw_payload=upstream.payload,
++                )
++                upstream_audit_id = upstream_record.get("id")
++                upstream_raw_hash = upstream_record.get("upstream_raw_hash")
++            else:
++                payload_json = json.dumps(
++                    upstream.payload,
++                    sort_keys=True,
++                    separators=(",", ":"),
++                )
++                upstream_raw_hash = sha256(payload_json.encode("utf-8")).hexdigest()
+         except UpstreamRateLimitError as exc:
+             JobSearchService._record_upstream_audit(
+                 request_id=request_id,
+@@ -397,7 +423,9 @@ class JobSearchService:
+ 
+     @staticmethod
+     def search_jobs(
+-        search: JobSearchRequest, request_id: str, client: USAJobsClient | None = None
++        search: JobSearchRequest,
++        request_id: str,
++        client: USAJobsSearchClient | None = None,
+     ) -> JobSearchResponse:
+         """Perform deterministic jobs search flow.
+ 
+diff --git a/apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py b/apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
+index b0b8fba..b072ebe 100644
+--- a/apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
++++ b/apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
+@@ -2,9 +2,12 @@
+ 
+ from __future__ import annotations
+ 
++import time
++from datetime import datetime, timezone
+ from typing import Any
+ from uuid import uuid4
+ 
++from app.db.repo.job_sync_run_repo import JobSyncRunRepo
+ from app.db.repo.saved_search_ingested_job_repo import SavedSearchIngestedJobRepo
+ from app.services.job_search_service import JobSearchExecutionResult
+ 
+@@ -20,46 +23,155 @@ class USAJobsIngestionService:
+         saved_search_id: str,
+         execution: JobSearchExecutionResult,
+         trigger_mode: str,
++        dry_run: bool = False,
++        close_missing: bool = False,
+     ) -> dict[str, Any]:
++        started = time.monotonic()
++        started_at = datetime.now(timezone.utc).isoformat()
++        sync_run_id = str(uuid4())
+         if execution.source_name != OFFICIAL_USAJOBS_SOURCE:
+             raise ValueError(
+                 f"Unsupported ingestion source={execution.source_name}. "
+                 "Runtime ingestion only accepts the official USAJOBS API."
+             )
+ 
++        run_mode = "dry_run" if dry_run else "write"
+         summary: dict[str, Any] = {
++            "sync_run_id": sync_run_id,
+             "source": execution.source_name,
+             "mapper_version": execution.mapper_version,
+             "query_fingerprint": execution.query_fingerprint,
+             "upstream_audit_id": execution.upstream_audit_id,
+             "upstream_raw_hash": execution.upstream_raw_hash,
++            "records_fetched": len(execution.normalized_items),
+             "new_count": 0,
+             "updated_count": 0,
+             "unchanged_count": 0,
++            "closed_count": 0,
+             "warning_count": 0,
++            "dry_run": dry_run,
++            "failed_partitions": [],
++            "stale_partitions": [],
++            "alert_events_queued": 0,
++            "indexing_events_queued": 0,
+         }
++        seen_job_ids: list[str] = []
+         for normalized in execution.normalized_items:
+-            outcome = SavedSearchIngestedJobRepo.upsert(
+-                record_id=str(uuid4()),
+-                saved_search_id=saved_search_id,
+-                job_id=normalized.job.id,
+-                source=execution.source_name,
+-                source_slice={
+-                    **execution.query_slice,
+-                    "trigger_mode": trigger_mode,
+-                    "saved_search_id": saved_search_id,
+-                },
+-                mapper_version=execution.mapper_version,
+-                query_fingerprint=execution.query_fingerprint,
+-                upstream_audit_id=execution.upstream_audit_id,
+-                upstream_raw_hash=execution.upstream_raw_hash,
+-                canonical_job=normalized.job.model_dump(mode="json"),
+-                ingest_warnings=list(normalized.warnings),
+-                seen_at=execution.fetched_at,
+-            )
++            seen_job_ids.append(normalized.job.id)
++            source_slice = dict(execution.query_slice)
++            source_slice["trigger_mode"] = trigger_mode
++            source_slice["saved_search_id"] = saved_search_id
++            canonical_job = normalized.job.model_dump(mode="json")
++            if dry_run:
++                outcome = "new"
++            else:
++                outcome = SavedSearchIngestedJobRepo.upsert(
++                    record_id=str(uuid4()),
++                    saved_search_id=saved_search_id,
++                    job_id=normalized.job.id,
++                    source=execution.source_name,
++                    source_slice=source_slice,
++                    mapper_version=execution.mapper_version,
++                    query_fingerprint=execution.query_fingerprint,
++                    upstream_audit_id=execution.upstream_audit_id,
++                    upstream_raw_hash=execution.upstream_raw_hash,
++                    canonical_job=canonical_job,
++                    ingest_warnings=list(normalized.warnings),
++                    seen_at=execution.fetched_at,
++                    sync_run_id=sync_run_id,
++                )
+             summary_key = f"{outcome}_count"
+             summary[summary_key] = int(summary[summary_key]) + 1
+             summary["warning_count"] = int(summary["warning_count"]) + len(
+                 normalized.warnings
+             )
++        if close_missing and not dry_run:
++            source_slice = dict(execution.query_slice)
++            source_slice["trigger_mode"] = trigger_mode
++            source_slice["saved_search_id"] = saved_search_id
++            closed_count = SavedSearchIngestedJobRepo.mark_missing_as_closed(
++                saved_search_id=saved_search_id,
++                seen_job_ids=seen_job_ids,
++                closed_at=execution.fetched_at,
++                source_slice=source_slice,
++                upstream_audit_id=execution.upstream_audit_id,
++                sync_run_id=sync_run_id,
++            )
++            summary["closed_count"] = closed_count
++            summary["alert_events_queued"] = closed_count
++            summary["indexing_events_queued"] = closed_count
++        if not dry_run:
++            completed_at = datetime.now(timezone.utc).isoformat()
++            duration_ms = int((time.monotonic() - started) * 1000)
++            event_count = int(summary["new_count"]) + int(summary["updated_count"]) + int(
++                summary["closed_count"]
++            )
++            summary["alert_events_queued"] = event_count
++            summary["indexing_events_queued"] = event_count
++            JobSyncRunRepo.create(
++                {
++                    "id": sync_run_id,
++                    "saved_search_id": saved_search_id,
++                    "source": execution.source_name,
++                    "trigger_mode": trigger_mode,
++                    "run_mode": run_mode,
++                    "status": "success",
++                    "started_at": started_at,
++                    "completed_at": completed_at,
++                    "records_fetched": summary["records_fetched"],
++                    "new_jobs": summary["new_count"],
++                    "updated_jobs": summary["updated_count"],
++                    "unchanged_jobs": summary["unchanged_count"],
++                    "closed_jobs": summary["closed_count"],
++                    "failed_partitions": summary["failed_partitions"],
++                    "stale_partitions": summary["stale_partitions"],
++                    "alert_events_queued": summary["alert_events_queued"],
++                    "indexing_events_queued": summary["indexing_events_queued"],
++                    "duration_ms": duration_ms,
++                    "error_summary": None,
++                }
++            )
+         return summary
++
++    @staticmethod
++    def record_failed_partition(
++        *,
++        saved_search_id: str | None,
++        trigger_mode: str,
++        partition: dict[str, Any],
++        error_summary: str,
++    ) -> dict[str, Any]:
++        """Persist a failed partition without pretending any job rows were synced."""
++
++        now = datetime.now(timezone.utc).isoformat()
++        sync_run_id = str(uuid4())
++        failed_partitions = [partition]
++        JobSyncRunRepo.create(
++            {
++                "id": sync_run_id,
++                "saved_search_id": saved_search_id,
++                "source": OFFICIAL_USAJOBS_SOURCE,
++                "trigger_mode": trigger_mode,
++                "run_mode": "write",
++                "status": "failed",
++                "started_at": now,
++                "completed_at": now,
++                "records_fetched": 0,
++                "new_jobs": 0,
++                "updated_jobs": 0,
++                "unchanged_jobs": 0,
++                "closed_jobs": 0,
++                "failed_partitions": failed_partitions,
++                "stale_partitions": [],
++                "alert_events_queued": 0,
++                "indexing_events_queued": 0,
++                "duration_ms": 0,
++                "error_summary": error_summary,
++            }
++        )
++        return {
++            "sync_run_id": sync_run_id,
++            "status": "failed",
++            "failed_partitions": failed_partitions,
++            "error_summary": error_summary,
++        }
+diff --git a/apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md b/apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+new file mode 100644
+index 0000000..5a1ac14
+--- /dev/null
++++ b/apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+@@ -0,0 +1,29 @@
++# Sync Job Staging Validation
++
++## What Changed
++
++This change makes the USAJOBS sync path safer to test before production. It adds deterministic fixture tests, a dry-run path, a small staging validation script, sync run health output, and a runbook for validating the job with a narrow USAJOBS partition.
++
++The sync still uses only the official USAJOBS API. No scraping was added.
++
++## Why Staging Validation Matters
++
++Federal job data changes frequently. A staging validation pass lets us prove that new jobs, repeated jobs, changed jobs, and closed jobs are handled correctly before the production scheduler depends on the pipeline.
++
++The dry-run mode is intended to let operators fetch and normalize real USAJOBS data without writing staging records. The Day 46 review found one remaining safety gap: upstream error paths can still write audit records, so Day 47 must harden dry-run failure behavior before this is considered production-ready. The limited write mode then tests the real persistence path with a small slice, such as series `2210`, Florida, last 7 days, and 1-2 pages.
++
++## How Duplicate, Stale, And Expired Job Risks Are Controlled
++
++Duplicate jobs are controlled by a unique `saved_search_id, job_id` key. Running the same sync twice updates the existing row instead of creating duplicates.
++
++Stale updates are reduced by hashing only meaningful canonical job fields. A refreshed source retrieval timestamp alone does not make an unchanged job look updated.
++
++Expired or closed jobs are handled through an explicit close-missing mode. Limited staging validation does not close missing jobs because a 1-2 page slice is not a complete partition.
++
++Alert and indexing behavior is queue/accounting-only for this staging validation slice. The change records queued-event counts but does not send real email and does not call external indexing APIs.
++
++## What Remains Before Production
++
++Before production, operators still need dry-run safety hardening, write-mode environment gates, real queue rows with dedupe, canonical USAJOBS field normalization, a final approved staging write run, a repeat-run idempotency check, review of the sync health output, and confirmation that production scheduler settings remain unchanged.
++
++Real external indexing submission remains out of scope unless a separate explicit opt-in flag and production approval are added later.
+diff --git a/apps/pathos-platform/backend/docs/merge-notes/current.md b/apps/pathos-platform/backend/docs/merge-notes/current.md
+index 2f728e8..9d5652d 100644
+--- a/apps/pathos-platform/backend/docs/merge-notes/current.md
++++ b/apps/pathos-platform/backend/docs/merge-notes/current.md
+@@ -4235,6 +4235,159 @@ bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/pha
+ - Phase 2 status: complete
+ - Recommended next branch: `git checkout -b feature/backend-qualification-engine-v1`
+ 
++## 2026-06-30 - Sync Job Staging Validation Slice
++
++### Summary
++- Added staging-safe USAJOBS sync validation support on top of the existing saved-search ingestion path.
++- Added `job_sync_runs` and `job_change_log` persistence for health and meaningful change tracking.
++- Added dry-run support that fetches and normalizes official USAJOBS data without writing staging records or upstream raw audit rows.
++- Added a bounded staging CLI for series `2210`, Florida, last 7 days, max 1-2 pages.
++- Added fixture tests for new ingestion, repeat idempotency, raw snapshot preservation, content hash behavior, canonical field comparison, salary/location/remote/closing-date/document/qualification changes, closed lifecycle handling, failed partition handling, duplicate prevention, and telework not being treated as fully remote.
++- Added staging runbook and non-technical change brief.
++
++### Human Simulation Gate
++| Item | Value |
++|------|-------|
++| Required | No |
++| Triggers hit | none |
++| Why | Backend sync, repository, CLI, and documentation work only; no browser UI, navigation, hydration, or localStorage flow changed. |
++
++### AI Acceptance Checklist
++| Item | Value |
++|------|-------|
++| Flow | Official USAJOBS API fetch -> JobSearchService normalization -> USAJobsIngestionService dry-run or bounded write -> saved_search_ingested_jobs/job_sync_runs/job_change_log -> ops health output |
++| Store(s) | None |
++| Storage key(s) | None |
++| Failure mode | Staging could misread duplicate, stale, changed, or closed jobs before production sync validation. |
++| How tested | Deterministic pytest fixtures, ruff, mypy, migration tests; full pytest attempted but timed out after 244 seconds. |
++
++### Validation Commands
++```text
++poetry run ruff check .
++Result: passed, All checks passed!
++
++poetry run pytest -q tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py --cov=app --cov-fail-under=0
++Result: passed, 27 passed in 36.60s
++
++poetry run mypy app tests
++Result: passed, Success: no issues found in 224 source files
++
++poetry run pytest -q tests/test_alembic_migrations.py --cov=app --cov-fail-under=0
++Result: passed, 1 passed, 1 skipped in 7.15s
++
++poetry run pytest -q tests/test_migrations_runner.py --cov=app --cov-fail-under=0
++Result: passed, 3 passed in 8.79s
++
++poetry run pytest -q
++Result: not completed; command timed out after 244 seconds before returning output.
++```
++
++### Git Status
++```text
++On branch feature/backend-usajobs-ingestion-v1
++Changes to be committed:
++  (use "git restore --staged <file>..." to unstage)
++	modified:   README.md
++	new file:   alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
++	modified:   app/adapters/usajobs/normalize.py
++	new file:   app/db/migrations/013_saved_search_ingested_jobs_v1.sql
++	new file:   app/db/repo/saved_search_ingested_job_repo.py
++	modified:   app/db/repo/saved_search_repo.py
++	modified:   app/db/repo/upstream_audit_repo.py
++	modified:   app/services/alert_service.py
++	modified:   app/services/job_search_service.py
++	modified:   app/services/saved_search_runner_service.py
++	new file:   app/services/usajobs_ingestion_service.py
++	modified:   app/services/wipe_service.py
++	new file:   docs/change-briefs/backend-usajobs-ingestion-v1.md
++	modified:   docs/merge-notes/current.md
++	modified:   tests/api/alerts/test__categories__alerts.py
++	modified:   tests/api/alerts/test__categories__alerts_observability_v1.py
++	modified:   tests/api/alerts/test__categories__alerts_run_v1.py
++	modified:   tests/api/jobs/test__positive__normalize.py
++	new file:   tests/db/repo/test_saved_search_ingested_job_repo.py
++	modified:   tests/edge_case/test_edge_case_testing_hardening_v1.py
++	modified:   tests/services/test_saved_search_runner_service.py
++	new file:   tests/services/test_usajobs_ingestion_service.py
++	modified:   tests/test_alembic_migrations.py
++	modified:   tests/test_log_event_registry_and_schema.py
++	new file:   tests/usajobs_execution_helper.py
++	modified:   tests/use_case/test_use_case_testing_hardening_v1.py
++	new file:   ../frontend/docs/change-briefs/resume-builder-phase1.md
++	new file:   ../frontend/docs/change-briefs/resume-builder-phase2.md
++	new file:   ../frontend/docs/change-briefs/resume-builder-ux-compression.md
++	modified:   ../frontend/docs/merge-notes/current.md
++	new file:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
++	modified:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
++	new file:   ../../../restructure-safety/backend-path-status.txt
++	new file:   ../../../restructure-safety/backend-repo-branch.txt
++	new file:   ../../../restructure-safety/backend-repo-remotes.txt
++	new file:   ../../../restructure-safety/backend-repo-status.txt
++	new file:   ../../../restructure-safety/frontend-path-status.txt
++	new file:   ../../../restructure-safety/frontend-repo-branch.txt
++	new file:   ../../../restructure-safety/frontend-repo-remotes.txt
++	new file:   ../../../restructure-safety/frontend-repo-status.txt
++	new file:   ../../../restructure-safety/root-branch.txt
++	new file:   ../../../restructure-safety/root-full-status.txt
++	new file:   ../../../restructure-safety/root-log.txt
++	new file:   ../../../restructure-safety/root-remotes.txt
++	new file:   ../../../restructure-safety/root-status-after-split.txt
++	new file:   ../../../restructure-safety/root-status.txt
++	new file:   ../../../restructure-safety/snapshot-timestamp.txt
++	new file:   ../../../restructure-safety/split-validation-summary.json
++
++Changes not staged for commit:
++  (use "git add <file>..." to update what will be committed)
++  (use "git restore <file>..." to discard changes in working directory)
++	modified:   README.md
++	modified:   alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
++	modified:   app/api/v1/ops.py
++	modified:   app/db/migrations/013_saved_search_ingested_jobs_v1.sql
++	new file:   app/db/repo/job_sync_run_repo.py
++	modified:   app/db/repo/saved_search_ingested_job_repo.py
++	modified:   app/models/job_search.py
++	modified:   app/services/job_search_service.py
++	modified:   app/services/usajobs_ingestion_service.py
++	new file:   docs/change-briefs/sync-job-staging-validation.md
++	new file:   docs/runbook/usajobs-sync-staging-validation.md
++	new file:   scripts/usajobs_staging_validation.py
++	modified:   tests/db/repo/test_saved_search_ingested_job_repo.py
++	modified:   tests/services/test_usajobs_ingestion_service.py
++
++Untracked files:
++  (use "git add <file>..." to include in what will be committed)
++	../../../usajobs-sync.env.ps1
++```
++
++### Branch
++```text
++feature/backend-usajobs-ingestion-v1
++```
++
++### git diff --name-status develop...HEAD
++```text
++
++```
++
++### git diff --stat develop...HEAD
++```text
++
++```
++
++### Patch Artifacts
++```text
++artifacts/sync-job-staging-validation.patch - 0 bytes
++artifacts/sync-job-staging-validation-this-run.patch - 83K
++```
++
++### Notes
++- `git diff develop...HEAD` is empty because this slice is uncommitted working-tree work layered on the current feature branch.
++- `git add -N .` was used before patch generation so new files are represented in `git diff` without committing.
++- Existing unrelated frontend and restructure-safety intent-to-add entries were already present in the broader worktree and were not modified for this slice.
++- No production scheduler setting was changed.
++- No live email delivery or external indexing submission was enabled.
++- No USAJOBS scraping was added.
++
+ ### Final git state refresh
+ #### git status
+ ```text
+@@ -4277,3 +4430,95 @@ bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/pha
+ -rwxrwxrwx 1 joriel joriel 257K Mar 25 18:52 artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+ -rwxrwxrwx 1 joriel joriel    0 Mar 25 18:52 artifacts/phase-2-backend-usajobs-ingestion.patch
+ ```
++## 2026-07-01 - Day 46 Checkpoint And Production-Readiness Roadmap
++
++### Branch
++```text
++feature/backend-usajobs-ingestion-v1
++```
++
++### Scope
++- Checkpoint the current USAJOBS sync staging-validation slice without fixing the known review blockers.
++- Regenerate patch artifacts before commit.
++- Preserve the review verdict: not merge-ready.
++- Add `docs/roadmaps/usajobs-sync-production-readiness-days.md` for Day 47 through Day 56 follow-up work.
++- Make tiny documentation hygiene edits so the runbook and change brief do not overstate dry-run safety before Day 47.
++
++### Known Merge Blockers Preserved
++- Dry-run can still mutate staging on upstream error paths because upstream audit records may be written when `record_upstream_audit=False`.
++- Staging write mode is not environment-gated.
++- Alert/indexing behavior is documented as queue-only, but the implementation currently appears to store counters rather than persisted deduped queue rows.
++- Production canonical USAJOBS jobs do not yet prove all fields tested by fixture-only dictionaries.
++
++### Known Should-Fix Items Preserved
++- Dry-run output marks every fetched item as new and is weak for staging idempotency validation.
++- Remote/telework classification should prefer explicit USAJOBS remote indicators.
++- Closed-job handling must be guarded against partial partitions.
++- Health endpoint needs direct tests for auth, no-row, populated-row, and sanitized-error cases.
++- Schema integrity should be hardened with relationships, indexes, and constraints where appropriate.
++
++### Pre-Commit Git State
++```text
++git status
++Result: branch feature/backend-usajobs-ingestion-v1 with backend USAJOBS sync validation changes plus unrelated pre-existing staged frontend/restructure-safety files. Those unrelated files are intentionally excluded from this checkpoint commit.
++
++git branch --show-current
++Result: feature/backend-usajobs-ingestion-v1
++
++git diff --name-status
++Result: 15 backend slice files changed:
++M apps/pathos-platform/backend/README.md
++M apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
++M apps/pathos-platform/backend/app/api/v1/ops.py
++M apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql
++A apps/pathos-platform/backend/app/db/repo/job_sync_run_repo.py
++M apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
++M apps/pathos-platform/backend/app/models/job_search.py
++M apps/pathos-platform/backend/app/services/job_search_service.py
++M apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
++A apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
++M apps/pathos-platform/backend/docs/merge-notes/current.md
++A apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
++A apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
++M apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py
++M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
++
++git diff --stat
++Result: 15 files changed, 1555 insertions(+), 42 deletions(-)
++```
++
++### Validation Commands
++```text
++poetry run ruff check .
++Result: passed, All checks passed!
++
++poetry run mypy app tests
++Result: passed, Success: no issues found in 224 source files
++
++poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py -q --cov=app --cov-fail-under=0
++Result: passed, 27 passed in 39.35s
++
++poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
++Result: passed, 4 passed, 1 skipped in 16.33s
++
++poetry run pytest -q --maxfail=1
++Result: timed out after 248 seconds with no failure surfaced before timeout.
++Prior collection evidence: pytest collection previously completed and collected 297 tests.
++Recommended next narrow command: poetry run pytest --no-cov -vv --durations=20 --maxfail=1 tests
++```
++
++### Patch Artifacts Before Commit
++```text
++artifacts/sync-job-staging-validation.patch: 0 bytes
++artifacts/sync-job-staging-validation-this-run.patch: 84723 bytes
++```
++
++Note: the cumulative `develop...HEAD` artifact is 0 bytes before commit because the work is still uncommitted. Regenerate patch artifacts after the checkpoint commit.
++
++### Production-Readiness Roadmap
++- Added `docs/roadmaps/usajobs-sync-production-readiness-days.md`.
++- Next recommended continuation prompt: Day 47 dry-run safety and environment gates.
++
++### Merge Readiness
++- Status: not merge-ready.
++- Do not open a PR, merge, enable production scheduler changes, enable real email delivery, or enable external indexing submissions from this checkpoint.
+diff --git a/apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md b/apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+new file mode 100644
+index 0000000..a208512
+--- /dev/null
++++ b/apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+@@ -0,0 +1,113 @@
++# USAJOBS Sync Staging Validation Runbook
++
++This runbook validates the bounded Voloro/PathOS USAJOBS sync path before production. The sync uses only the official USAJOBS API through `app/adapters/usajobs/client.py`; scraping is not allowed.
++
++## What This Validates
++
++- Worker entrypoint: `app/worker/__init__.py` runs alert scheduler ticks.
++- Scheduler assumptions: the worker delegates to `SchedulerEngine`, which calls `AlertsRunService.run_enabled_rules`.
++- USAJOBS integration path: `USAJobsClient.search_jobs` -> `JobSearchService.execute_search`.
++- Canonical job model: `app/domain/jobs/canonical_models.py`.
++- Raw source snapshots: `upstream_api_audit_records.payload_json` and `response_sha256`.
++- Canonical persisted jobs: `saved_search_ingested_jobs`.
++- Sync run health: `job_sync_runs`.
++- Change detection: `job_change_log`.
++- Alert/indexing behavior: staging validation records queued-event counts only; it does not send email and does not call external indexing APIs.
++
++## Local Fixture Tests
++
++Run deterministic tests without live USAJOBS calls:
++
++```powershell
++poetry run pytest -q tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py --cov=app --cov-fail-under=0
++```
++
++Run lint for the touched sync-validation files:
++
++```powershell
++poetry run ruff check app/services/usajobs_ingestion_service.py app/services/job_search_service.py app/db/repo/saved_search_ingested_job_repo.py app/db/repo/job_sync_run_repo.py app/api/v1/ops.py scripts/usajobs_staging_validation.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py
++```
++
++## Dry-Run Staging Sync
++
++Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and is intended to suppress both upstream audit writes and ingestion writes.
++
++Known Day 46 checkpoint gap: upstream error paths still need Day 47 hardening so dry-run failures cannot write upstream audit records. Do not treat dry-run as production-ready until that fix is complete.
++
++```powershell
++$env:PATHOS_ENV="staging"
++$env:USAJOBS_API_KEY="<staging-usajobs-key>"
++$env:USAJOBS_USER_AGENT="<staging-user-agent>"
++poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
++```
++
++Expected output:
++- `records_fetched` is the number of normalized USAJOBS records returned.
++- `sync_run_ids` is empty.
++- `alert_events_queued` is `0`.
++- `indexing_events_queued` is `0`.
++
++## Limited Staging Write Sync
++
++Use a deliberately small partition: series `2210`, Florida, last 7 days, maximum 1-2 pages.
++
++```powershell
++$env:PATHOS_ENV="staging"
++$env:ALERTS_DELIVERY_ENABLED="false"
++$env:DRY_RUN_MODE="false"
++$env:USAJOBS_API_KEY="<staging-usajobs-key>"
++$env:USAJOBS_USER_AGENT="<staging-user-agent>"
++poetry run python scripts/usajobs_staging_validation.py --mode write --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
++```
++
++This write mode persists:
++- raw upstream snapshot in `upstream_api_audit_records`,
++- canonical rows in `saved_search_ingested_jobs`,
++- run summary in `job_sync_runs`,
++- meaningful changes in `job_change_log`.
++
++It does not mark missing jobs closed because a 1-2 page staging partition is not a complete USAJOBS partition.
++
++## Repeat-Run Idempotency Check
++
++Run the same limited write command twice. On the second run:
++
++- `unchanged_jobs` should increase for jobs already seen.
++- duplicate canonical rows should not appear because `saved_search_ingested_jobs` is unique on `saved_search_id, job_id`.
++- `updated_jobs` should remain `0` unless USAJOBS changed meaningful canonical content.
++- `job_change_log` should not add update rows for only a refreshed source retrieval timestamp.
++
++## Health Output
++
++Call the staging health endpoint after write mode:
++
++```powershell
++Invoke-RestMethod `
++  -Headers @{ Authorization = "Bearer <staging-api-key>" } `
++  https://<staging-host>/api/v1/ops/usajobs-sync/health
++```
++
++Expected fields:
++- `last_sync_time`
++- `records_fetched`
++- `new_jobs`
++- `updated_jobs`
++- `closed_jobs`
++- `failed_partitions`
++- `stale_partitions`
++- `alert_events_queued`
++- `indexing_events_queued`
++- `duration_ms`
++- `error_summary`
++
++## Rollback Or Reset
++
++Preferred staging reset:
++
++1. Delete the validation saved search created by the script if one was created for the run.
++2. Confirm cascades removed related `saved_search_ingested_jobs` and `job_change_log` rows.
++3. If a full staging reset is approved, use the existing wipe/reset process documented in `docs/runbook/backend-runbook-v1.md`.
++
++Do not edit production scheduler settings for this validation pass.
++Do not enable real email delivery.
++Do not enable external indexing submissions.
+diff --git a/apps/pathos-platform/backend/scripts/usajobs_staging_validation.py b/apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+new file mode 100644
+index 0000000..0e07bdb
+--- /dev/null
++++ b/apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+@@ -0,0 +1,147 @@
++"""Run bounded USAJOBS staging validation through the official API only."""
++
++from __future__ import annotations
++
++import argparse
++import json
++from typing import Any
++
++from app.models.job_search import JobSearchRequest
++from app.models.saved_search import SavedSearchCreateRequest
++from app.services.job_search_service import JobSearchService
++from app.services.saved_search_service import SavedSearchService
++from app.services.usajobs_ingestion_service import USAJobsIngestionService
++
++
++def _parser() -> argparse.ArgumentParser:
++    parser = argparse.ArgumentParser(
++        description="Validate the bounded USAJOBS sync path without scraping."
++    )
++    parser.add_argument("--mode", choices=["dry-run", "write"], required=True)
++    parser.add_argument("--series", default="2210")
++    parser.add_argument("--location", default="Florida")
++    parser.add_argument("--date-posted-days", type=int, default=7)
++    parser.add_argument("--max-pages", type=int, default=1)
++    parser.add_argument("--page-size", type=int, default=25)
++    parser.add_argument("--saved-search-id", default="")
++    parser.add_argument("--request-id", default="usajobs-staging-validation")
++    return parser
++
++
++def _bounded_pages(max_pages: int) -> list[int]:
++    if max_pages < 1 or max_pages > 2:
++        raise ValueError("Staging validation max-pages must be 1 or 2.")
++    return list(range(1, max_pages + 1))
++
++
++def _search_request(args: argparse.Namespace, *, page: int) -> JobSearchRequest:
++    return JobSearchRequest(
++        keyword="information technology",
++        location=args.location,
++        series=[args.series],
++        date_posted_days=args.date_posted_days,
++        page=page,
++        page_size=args.page_size,
++    )
++
++
++def _saved_search_id(args: argparse.Namespace) -> str:
++    if args.saved_search_id.strip():
++        return args.saved_search_id.strip()
++    created = SavedSearchService.create(
++        SavedSearchCreateRequest(
++            name="USAJOBS staging validation 2210 Florida",
++            query=_search_request(args, page=1),
++        )
++    )
++    return created.id
++
++
++def _empty_totals(mode: str) -> dict[str, Any]:
++    return {
++        "mode": mode,
++        "records_fetched": 0,
++        "new_jobs": 0,
++        "updated_jobs": 0,
++        "unchanged_jobs": 0,
++        "closed_jobs": 0,
++        "failed_partitions": [],
++        "stale_partitions": [],
++        "alert_events_queued": 0,
++        "indexing_events_queued": 0,
++        "sync_run_ids": [],
++    }
++
++
++def main() -> int:
++    args = _parser().parse_args()
++    pages = _bounded_pages(args.max_pages)
++    dry_run = args.mode == "dry-run"
++    saved_search_id = "dry-run-preview"
++    if not dry_run:
++        saved_search_id = _saved_search_id(args)
++
++    totals = _empty_totals(args.mode)
++    totals["saved_search_id"] = saved_search_id
++    totals["partition"] = {
++        "series": args.series,
++        "location": args.location,
++        "date_posted_days": args.date_posted_days,
++        "pages": pages,
++        "page_size": args.page_size,
++    }
++
++    for page in pages:
++        search = _search_request(args, page=page)
++        partition = {
++            "series": args.series,
++            "location": args.location,
++            "date_posted_days": args.date_posted_days,
++            "page": page,
++            "page_size": args.page_size,
++        }
++        try:
++            execution = JobSearchService.execute_search(
++                search=search,
++                request_id=f"{args.request_id}-page-{page}",
++                allow_cache=False,
++                record_upstream_audit=not dry_run,
++            )
++            summary = USAJobsIngestionService.ingest_saved_search_results(
++                saved_search_id=saved_search_id,
++                execution=execution,
++                trigger_mode="staging_validation",
++                dry_run=dry_run,
++                close_missing=False,
++            )
++        except Exception as exc:  # noqa: BLE001 - CLI surfaces safe summary JSON.
++            if dry_run:
++                totals["failed_partitions"].append(partition)
++            else:
++                failure = USAJobsIngestionService.record_failed_partition(
++                    saved_search_id=saved_search_id,
++                    trigger_mode="staging_validation",
++                    partition=partition,
++                    error_summary=type(exc).__name__,
++                )
++                totals["sync_run_ids"].append(failure["sync_run_id"])
++                totals["failed_partitions"].append(partition)
++            totals["error_summary"] = type(exc).__name__
++            continue
++
++        totals["records_fetched"] += int(summary["records_fetched"])
++        totals["new_jobs"] += int(summary["new_count"])
++        totals["updated_jobs"] += int(summary["updated_count"])
++        totals["unchanged_jobs"] += int(summary["unchanged_count"])
++        totals["closed_jobs"] += int(summary["closed_count"])
++        totals["alert_events_queued"] += int(summary["alert_events_queued"])
++        totals["indexing_events_queued"] += int(summary["indexing_events_queued"])
++        if not dry_run:
++            totals["sync_run_ids"].append(summary["sync_run_id"])
++
++    print(json.dumps(totals, indent=2, sort_keys=True))
++    return 1 if totals["failed_partitions"] else 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py b/apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py
+index df96fe0..8855ea6 100644
+--- a/apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py
++++ b/apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py
+@@ -140,3 +140,144 @@ def test_saved_search_ingested_job_repo_marks_changed_payload_as_updated(monkeyp
+     assert rows[0]["upstream_audit_id"] == "audit-2"
+     assert rows[0]["unchanged_run_count"] == 0
+     assert json.loads(rows[0]["canonical_job_json"])["title"] == "Senior Analyst"
++
++
++def test_saved_search_ingested_job_repo_prevents_duplicates(monkeypatch, tmp_path) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "saved_search_ingested_jobs_dupes.db"))
++    saved_search_id = _create_saved_search()
++    canonical_job = {
++        "id": "USA-DUPE",
++        "title": "Analyst",
++        "organization": "Agency",
++        "locations": ["Remote"],
++        "compensation": {"grade_min": 11, "grade_max": 12},
++        "open_date": None,
++        "close_date": None,
++        "apply_url": "https://www.usajobs.gov/job/dupe/apply",
++        "source": {
++            "source": "USAJOBS",
++            "retrieved_at": "2026-02-20T00:00:00+00:00",
++            "mapper_version": "usajobs-normalize-v1",
++        },
++    }
++
++    first = SavedSearchIngestedJobRepo.upsert(
++        record_id="ing-dupe-1",
++        saved_search_id=saved_search_id,
++        job_id="USA-DUPE",
++        source="USAJOBS_OFFICIAL_API",
++        source_slice={"page": 1},
++        mapper_version="usajobs-normalize-v1",
++        query_fingerprint="fp-dupe",
++        upstream_audit_id="audit-dupe-1",
++        upstream_raw_hash="raw-dupe-1",
++        canonical_job=canonical_job,
++        ingest_warnings=[],
++        seen_at="2026-02-20T00:00:00+00:00",
++    )
++    second = SavedSearchIngestedJobRepo.upsert(
++        record_id="ing-dupe-2",
++        saved_search_id=saved_search_id,
++        job_id="USA-DUPE",
++        source="USAJOBS_OFFICIAL_API",
++        source_slice={"page": 1},
++        mapper_version="usajobs-normalize-v1",
++        query_fingerprint="fp-dupe",
++        upstream_audit_id="audit-dupe-2",
++        upstream_raw_hash="raw-dupe-2",
++        canonical_job=canonical_job,
++        ingest_warnings=[],
++        seen_at="2026-02-20T00:05:00+00:00",
++    )
++    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
++    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
++
++    assert first == "new"
++    assert second == "unchanged"
++    assert len(rows) == 1
++    assert [row["change_type"] for row in changes] == ["new"]
++
++
++def test_saved_search_ingested_job_repo_logs_meaningful_canonical_field_changes(
++    monkeypatch,
++    tmp_path,
++) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "saved_search_ingested_jobs_changes.db"))
++    saved_search_id = _create_saved_search()
++    base_job = {
++        "id": "USA-CHANGE",
++        "title": "IT Specialist",
++        "organization": "Agency",
++        "locations": ["Tampa, Florida"],
++        "remote_status": "onsite",
++        "documents": ["resume"],
++        "qualifications": ["one year specialized experience"],
++        "compensation": {
++            "grade_min": 11,
++            "grade_max": 12,
++            "salary_min": 80000,
++            "salary_max": 95000,
++        },
++        "open_date": "2026-02-01",
++        "close_date": "2026-02-15",
++        "apply_url": "https://www.usajobs.gov/job/change/apply",
++        "source": {
++            "source": "USAJOBS",
++            "retrieved_at": "2026-02-20T00:00:00+00:00",
++            "mapper_version": "usajobs-normalize-v1",
++        },
++    }
++    updated_job = json.loads(json.dumps(base_job))
++    updated_job["locations"] = ["Remote"]
++    updated_job["remote_status"] = "remote"
++    updated_job["documents"] = ["resume", "transcripts"]
++    updated_job["qualifications"] = ["two years specialized experience"]
++    updated_job["compensation"] = {
++        "grade_min": 12,
++        "grade_max": 13,
++        "salary_min": 90000,
++        "salary_max": 125000,
++    }
++    updated_job["close_date"] = "2026-02-28"
++
++    SavedSearchIngestedJobRepo.upsert(
++        record_id="ing-change-1",
++        saved_search_id=saved_search_id,
++        job_id="USA-CHANGE",
++        source="USAJOBS_OFFICIAL_API",
++        source_slice={"page": 1},
++        mapper_version="usajobs-normalize-v1",
++        query_fingerprint="fp-change-1",
++        upstream_audit_id="audit-change-1",
++        upstream_raw_hash="raw-change-1",
++        canonical_job=base_job,
++        ingest_warnings=[],
++        seen_at="2026-02-20T00:00:00+00:00",
++    )
++    outcome = SavedSearchIngestedJobRepo.upsert(
++        record_id="ing-change-2",
++        saved_search_id=saved_search_id,
++        job_id="USA-CHANGE",
++        source="USAJOBS_OFFICIAL_API",
++        source_slice={"page": 1},
++        mapper_version="usajobs-normalize-v1",
++        query_fingerprint="fp-change-2",
++        upstream_audit_id="audit-change-2",
++        upstream_raw_hash="raw-change-2",
++        canonical_job=updated_job,
++        ingest_warnings=[],
++        seen_at="2026-02-20T00:05:00+00:00",
++    )
++    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
++    update_rows = [row for row in changes if row["change_type"] == "updated"]
++    changed_fields = json.loads(update_rows[0]["changed_fields_json"])
++
++    assert outcome == "updated"
++    assert changed_fields == [
++        "locations",
++        "compensation",
++        "close_date",
++        "remote_status",
++        "documents",
++        "qualifications",
++    ]
+diff --git a/apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py b/apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+index 6d1219c..e88d71f 100644
+--- a/apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
++++ b/apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+@@ -5,28 +5,38 @@ import json
+ import pytest
+ 
+ from app.adapters.usajobs.normalize import NormalizedUSAJobsItem
++from app.adapters.usajobs.types import USAJobsSearchResponse, UpstreamAuditSummary
++from app.db.repo.job_sync_run_repo import JobSyncRunRepo
+ from app.db.repo.saved_search_ingested_job_repo import SavedSearchIngestedJobRepo
++from app.db.repo.upstream_audit_repo import UpstreamAuditRepo
+ from app.domain.jobs.canonical_models import CanonicalCompensation, CanonicalJob, CanonicalSourceMetadata
+ from app.models.job_search import JobSearchRequest, JobSearchResponse
+ from app.models.saved_search import SavedSearchCreateRequest
++from app.services.job_search_service import JobSearchService
+ from app.services.job_search_service import JobSearchExecutionResult
+ from app.services.saved_search_service import SavedSearchService
+ from app.services.usajobs_ingestion_service import USAJobsIngestionService
+ 
+ 
+-def _canonical_job(job_id: str) -> CanonicalJob:
++def _canonical_job(
++    job_id: str,
++    *,
++    title: str = "Analyst",
++    locations: list[str] | None = None,
++    retrieved_at: str = "2026-02-20T00:00:00+00:00",
++) -> CanonicalJob:
+     return CanonicalJob(
+         id=job_id,
+-        title="Analyst",
++        title=title,
+         organization="Agency",
+-        locations=["Remote"],
++        locations=locations if locations is not None else ["Remote"],
+         compensation=CanonicalCompensation(grade_min=11, grade_max=12),
+         open_date="2026-02-01",
+         close_date="2026-02-15",
+         apply_url=f"https://www.usajobs.gov/job/{job_id}/apply",
+         source=CanonicalSourceMetadata(
+             source="USAJOBS",
+-            retrieved_at="2026-02-20T00:00:00+00:00",
++            retrieved_at=retrieved_at,
+             mapper_version="usajobs-normalize-v1",
+         ),
+     )
+@@ -107,3 +117,243 @@ def test_usajobs_ingestion_service_persists_provenance_summary(monkeypatch, tmp_
+     assert first_slice["query_fingerprint"] == "fp-1"
+     assert rows[0]["source"] == "USAJOBS_OFFICIAL_API"
+     assert rows[0]["mapper_version"] == "usajobs-normalize-v1"
++    assert rows[0]["lifecycle_state"] == "open"
++
++
++def test_usajobs_ingestion_dry_run_does_not_create_database(monkeypatch, tmp_path) -> None:
++    db_path = tmp_path / "ingestion_dry_run.db"
++    monkeypatch.setenv("PATHOS_DB_PATH", str(db_path))
++
++    summary = USAJobsIngestionService.ingest_saved_search_results(
++        saved_search_id="dry-run-preview",
++        execution=_execution(["J1", "J2"]),
++        trigger_mode="staging_validation",
++        dry_run=True,
++    )
++
++    assert summary["dry_run"] is True
++    assert summary["records_fetched"] == 2
++    assert summary["new_count"] == 2
++    assert summary["alert_events_queued"] == 0
++    assert summary["indexing_events_queued"] == 0
++    assert not db_path.exists()
++
++
++def test_usajobs_ingestion_repeat_sync_ignores_retrieved_at_only_change(monkeypatch, tmp_path) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_repeat.db"))
++    saved_search_id = _create_saved_search()
++    first = _execution(["J1"])
++    second_job = _canonical_job(
++        "J1",
++        retrieved_at="2026-02-20T00:10:00+00:00",
++    )
++    second = JobSearchExecutionResult(
++        response=JobSearchResponse(
++            results=[second_job],
++            total=1,
++            page=1,
++            page_size=20,
++            request_id="req-2",
++        ),
++        normalized_items=(NormalizedUSAJobsItem(job=second_job, warnings=()),),
++        query_fingerprint="fp-1",
++        mapper_version="usajobs-normalize-v1",
++        source_name="USAJOBS_OFFICIAL_API",
++        fetched_at="2026-02-20T00:10:00+00:00",
++        upstream_audit_id="audit-2",
++        upstream_raw_hash="raw-2",
++        query_slice={
++            "page": 1,
++            "page_size": 20,
++            "remote_only": False,
++            "query_fingerprint": "fp-1",
++        },
++    )
++
++    first_summary = USAJobsIngestionService.ingest_saved_search_results(
++        saved_search_id=saved_search_id,
++        execution=first,
++        trigger_mode="saved_search_runner",
++    )
++    second_summary = USAJobsIngestionService.ingest_saved_search_results(
++        saved_search_id=saved_search_id,
++        execution=second,
++        trigger_mode="saved_search_runner",
++    )
++    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
++    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
++
++    assert first_summary["new_count"] == 1
++    assert second_summary["unchanged_count"] == 1
++    assert second_summary["updated_count"] == 0
++    assert int(rows[0]["unchanged_run_count"]) == 1
++    assert [row["change_type"] for row in changes] == ["new"]
++
++
++def test_usajobs_ingestion_close_missing_marks_lifecycle_and_queues_events(monkeypatch, tmp_path) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_closed.db"))
++    saved_search_id = _create_saved_search()
++    USAJobsIngestionService.ingest_saved_search_results(
++        saved_search_id=saved_search_id,
++        execution=_execution(["J1", "J2"]),
++        trigger_mode="saved_search_runner",
++    )
++
++    summary = USAJobsIngestionService.ingest_saved_search_results(
++        saved_search_id=saved_search_id,
++        execution=_execution(["J1"]),
++        trigger_mode="complete_partition_validation",
++        close_missing=True,
++    )
++    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
++    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
++    closed = [row for row in rows if row["job_id"] == "J2"][0]
++
++    assert summary["closed_count"] == 1
++    assert summary["alert_events_queued"] == 1
++    assert summary["indexing_events_queued"] == 1
++    assert closed["lifecycle_state"] == "closed"
++    assert closed["closed_at"] == "2026-02-20T00:00:00+00:00"
++    assert [row["change_type"] for row in changes].count("closed") == 1
++
++
++def test_usajobs_ingestion_failed_partition_records_health(monkeypatch, tmp_path) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_failed.db"))
++
++    result = USAJobsIngestionService.record_failed_partition(
++        saved_search_id=None,
++        trigger_mode="staging_validation",
++        partition={"series": "2210", "location": "Florida", "page": 1},
++        error_summary="UpstreamUnavailableError",
++    )
++    health = JobSyncRunRepo.latest_health()
++
++    assert result["status"] == "failed"
++    assert health["status"] == "failed"
++    assert health["records_fetched"] == 0
++    assert health["failed_partitions"] == [
++        {"series": "2210", "location": "Florida", "page": 1}
++    ]
++    assert health["error_summary"] == "UpstreamUnavailableError"
++
++
++def _official_payload(*, job_id: str, remote: bool, telework: bool, location: str) -> dict:
++    return {
++        "SearchResult": {
++            "SearchResultCountAll": 1,
++            "SearchResultItems": [
++                {
++                    "MatchedObjectId": job_id,
++                    "MatchedObjectDescriptor": {
++                        "PositionID": job_id,
++                        "PositionTitle": "IT Specialist",
++                        "OrganizationName": "Agency",
++                        "PositionLocationDisplay": location,
++                        "PositionLocation": [{"LocationName": location}],
++                        "PositionRemuneration": [
++                            {"MinimumRange": "90000", "MaximumRange": "120000"}
++                        ],
++                        "UserArea": {
++                            "Details": {
++                                "RemoteIndicator": remote,
++                                "TeleworkEligible": telework,
++                                "ApplyURI": [f"https://www.usajobs.gov/job/{job_id}/apply"],
++                            }
++                        },
++                    },
++                }
++            ],
++        }
++    }
++
++
++class _FakeUSAJobsClient:
++    def __init__(self, payload: dict) -> None:
++        self.payload = payload
++
++    def search_jobs(self, query_params: dict) -> USAJobsSearchResponse:
++        return USAJobsSearchResponse(
++            payload=self.payload,
++            audit=UpstreamAuditSummary(
++                endpoint="/api/search",
++                query_hash="query-hash-1",
++                status_code=200,
++                latency_ms=1,
++                result_count=1,
++                error_class=None,
++            ),
++        )
++
++
++def test_job_search_preserves_raw_snapshot_for_write_path(monkeypatch, tmp_path) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "raw_snapshot.db"))
++    monkeypatch.setenv("USAJOBS_API_KEY", "key")
++    monkeypatch.setenv("USAJOBS_USER_AGENT", "tests@example.com")
++    payload = _official_payload(
++        job_id="RAW-1",
++        remote=True,
++        telework=False,
++        location="Remote",
++    )
++
++    execution = JobSearchService.execute_search(
++        search=JobSearchRequest(keyword="it", page=1, page_size=1),
++        request_id="req-raw",
++        client=_FakeUSAJobsClient(payload),
++        allow_cache=False,
++    )
++    audit_rows = UpstreamAuditRepo.list_recent(limit=1)
++
++    assert execution.upstream_audit_id == audit_rows[0]["id"]
++    assert execution.upstream_raw_hash == audit_rows[0]["upstream_raw_hash"]
++    assert json.loads(audit_rows[0]["upstream_raw_payload_json"]) == payload
++
++
++def test_job_search_dry_run_suppresses_raw_snapshot_write(monkeypatch, tmp_path) -> None:
++    db_path = tmp_path / "raw_snapshot_dry_run.db"
++    monkeypatch.setenv("PATHOS_DB_PATH", str(db_path))
++    monkeypatch.setenv("USAJOBS_API_KEY", "key")
++    monkeypatch.setenv("USAJOBS_USER_AGENT", "tests@example.com")
++
++    execution = JobSearchService.execute_search(
++        search=JobSearchRequest(keyword="it", page=1, page_size=1),
++        request_id="req-dry",
++        client=_FakeUSAJobsClient(
++            _official_payload(
++                job_id="DRY-1",
++                remote=True,
++                telework=False,
++                location="Remote",
++            )
++        ),
++        allow_cache=False,
++        record_upstream_audit=False,
++    )
++
++    assert execution.upstream_audit_id is None
++    assert execution.upstream_raw_hash is not None
++    assert not db_path.exists()
++
++
++def test_remote_only_filter_does_not_treat_telework_as_remote(monkeypatch, tmp_path) -> None:
++    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "telework_filter.db"))
++    monkeypatch.setenv("USAJOBS_API_KEY", "key")
++    monkeypatch.setenv("USAJOBS_USER_AGENT", "tests@example.com")
++
++    execution = JobSearchService.execute_search(
++        search=JobSearchRequest(keyword="it", remote_only=True, page=1, page_size=1),
++        request_id="req-telework",
++        client=_FakeUSAJobsClient(
++            _official_payload(
++                job_id="TEL-1",
++                remote=False,
++                telework=True,
++                location="Tampa, Florida",
++            )
++        ),
++        allow_cache=False,
++        record_upstream_audit=False,
++    )
++
++    assert execution.response.results == []
++    assert execution.response.total == 0

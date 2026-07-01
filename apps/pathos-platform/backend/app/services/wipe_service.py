@@ -24,6 +24,7 @@ class WipeService:
                 "alert_runs",
                 "alert_rules",
                 "saved_search_job_snapshots",
+                "saved_search_ingested_jobs",
                 "saved_search_checkpoints",
                 "saved_search_ingestion_ledger",
                 "saved_search_runs",

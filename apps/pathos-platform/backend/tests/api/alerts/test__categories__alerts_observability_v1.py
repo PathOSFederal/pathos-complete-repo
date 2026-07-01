@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.domain.jobs.canonical_models import CanonicalCompensation, CanonicalJob, CanonicalSourceMetadata
 from app.main import create_app
 from app.models.job_search import JobSearchResponse
+from usajobs_execution_helper import execution_from_response
 
 
 def _search(ids: list[str]) -> JobSearchResponse:
@@ -36,7 +37,10 @@ def _search(ids: list[str]) -> JobSearchResponse:
 
 def test_use_case__observability_desktop_and_retention_endpoints(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_obs_v1.db"))
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: _search(["A", "B"]))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search(["A", "B"])),
+    )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp1")
     app = create_app()
 
@@ -94,7 +98,10 @@ def test_use_case__observability_desktop_and_retention_endpoints(monkeypatch, tm
 def test_guardrails__min_interval_blocks_immediate_second_run(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_guardrails_v1.db"))
     monkeypatch.setenv("ALERT_RULE_MIN_INTERVAL_MINUTES", "10000")
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: _search(["A"]))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search(["A"])),
+    )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp1")
     app = create_app()
 
@@ -116,7 +123,10 @@ def test_guardrails__min_interval_blocks_immediate_second_run(monkeypatch, tmp_p
 
 def test_guardrails__db_lock_prevents_concurrent_run(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "alerts_lock_v1.db"))
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", lambda *a, **k: _search(["A"]))
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_search(["A"])),
+    )
     monkeypatch.setattr("app.services.job_search_service.JobSearchService.fingerprint_params", lambda _: "fp1")
     app = create_app()
     with TestClient(app) as client:

@@ -273,6 +273,40 @@ poetry run pytest -q
 docker compose up --build
 ```
 
+### Run bounded USAJOBS ingestion through saved-search flows
+
+Phase 2 keeps ingestion intentionally bounded. The backend only ingests USAJOBS records through
+existing saved-search execution paths, and only from the official `data.usajobs.gov` API.
+
+What happens during a saved-search run:
+- the backend fetches one bounded search slice from USAJOBS
+- the upstream payload is audited in `upstream_api_audit_records`
+- canonical jobs are normalized and persisted in `saved_search_ingested_jobs`
+- mapper version, upstream hash, query fingerprint, warnings, and saved-search slice context are retained
+
+How to exercise it:
+
+1. Create a saved search
+2. Run either:
+   - `POST /api/v1/saved-searches/{id}/run`
+   - `POST /api/v1/alerts/run` with an enabled rule for that saved search
+
+This is not a bulk backfill or warehouse sync. Broad harvesting, learning pipelines, and multi-page
+collection remain intentionally deferred.
+
+### Validate USAJOBS sync safely in staging
+
+Use `docs/runbook/usajobs-sync-staging-validation.md` for the production-safe staging plan.
+
+The validation path supports:
+- dry-run fetch and normalization with no staging data writes
+- limited write mode for series `2210`, Florida, last 7 days, maximum 1-2 pages
+- repeat-run idempotency checks
+- `/api/v1/ops/usajobs-sync/health` sync health output
+- queue/accounting-only alert and indexing event counts
+
+Do not change production scheduler settings or enable real delivery/indexing for this validation pass.
+
 ### Run Alembic migrations (SQLite local)
 
 ```bash

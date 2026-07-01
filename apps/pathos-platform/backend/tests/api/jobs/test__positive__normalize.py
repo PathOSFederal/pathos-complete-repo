@@ -8,7 +8,15 @@ Coverage intent:
 from __future__ import annotations
 
 from app.adapters.usajobs.models import USAJobsEnvelope
-from app.adapters.usajobs.normalize import normalize_search_items
+from app.adapters.usajobs.normalize import (
+    WARNING_INVALID_GRADE_DROPPED,
+    WARNING_INVALID_SALARY_DROPPED,
+    WARNING_MISSING_APPLY_URL_FALLBACK_USED,
+    WARNING_MISSING_JOB_ID_FALLBACK_USED,
+    WARNING_MISSING_LOCATION_FALLBACK_USED,
+    normalize_search_items,
+    normalize_search_items_with_warnings,
+)
 
 
 def test_positive__normalize_usajobs_payload_to_canonical_job() -> None:
@@ -74,3 +82,31 @@ def test_edge_case__normalize_missing_optional_fields() -> None:
     assert row.compensation.salary_min is None
     assert row.apply_url == "https://www.usajobs.gov/Search"
 
+
+def test_edge_case__normalize_collects_deterministic_warnings() -> None:
+    payload = {
+        "SearchResult": {
+            "SearchResultCountAll": 1,
+            "SearchResultItems": [
+                {
+                    "MatchedObjectDescriptor": {
+                        "PositionTitle": "Analyst",
+                        "OrganizationName": "Agency",
+                        "PositionLocation": [],
+                        "PositionRemuneration": [{"MinimumRange": "oops"}],
+                        "UserArea": {"Details": {"LowGrade": "99", "ApplyURI": []}},
+                    }
+                }
+            ],
+        }
+    }
+    envelope = USAJobsEnvelope.model_validate(payload)
+    row = normalize_search_items_with_warnings(envelope.SearchResult.SearchResultItems)[0]
+    assert row.job.id == "unknown-analyst"
+    assert row.warnings == (
+        WARNING_INVALID_GRADE_DROPPED,
+        WARNING_INVALID_SALARY_DROPPED,
+        WARNING_MISSING_APPLY_URL_FALLBACK_USED,
+        WARNING_MISSING_JOB_ID_FALLBACK_USED,
+        WARNING_MISSING_LOCATION_FALLBACK_USED,
+    )

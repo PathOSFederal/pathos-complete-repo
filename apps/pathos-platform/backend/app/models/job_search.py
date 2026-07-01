@@ -48,6 +48,7 @@ class JobSearchRequest(BaseModel):
     appointment_type: str | None = Field(default=None, max_length=30)
     work_schedule: str | None = Field(default=None, max_length=30)
     salary_min: int | None = Field(default=None, ge=0)
+    date_posted_days: int | None = Field(default=None, ge=1, le=30)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 

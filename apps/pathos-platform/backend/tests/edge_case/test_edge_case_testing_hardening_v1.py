@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.adapters.usajobs.types import USAJobsSearchResponse, UpstreamAuditSummary
 from app.main import create_app
 from app.models.job_search import JobSearchResponse
+from usajobs_execution_helper import execution_from_response
 
 
 def _zero_result_upstream() -> USAJobsSearchResponse:
@@ -106,6 +107,10 @@ def test_edge_case__enabled_rule_order_is_stable_across_runs_and_normalized_to_z
     monkeypatch.setattr(
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: fixed_response,
+    )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(fixed_response),
     )
     app = create_app(mode="openapi")
 
