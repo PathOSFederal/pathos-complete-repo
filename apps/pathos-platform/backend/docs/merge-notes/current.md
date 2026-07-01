@@ -4522,3 +4522,14 @@ Note: the cumulative `develop...HEAD` artifact is 0 bytes before commit because 
 ### Merge Readiness
 - Status: not merge-ready.
 - Do not open a PR, merge, enable production scheduler changes, enable real email delivery, or enable external indexing submissions from this checkpoint.
+
+### Checkpoint Commit
+```text
+git commit -m "#feature/backend-usajobs-ingestion-v1 Day 46 - add USAJOBS sync staging validation"
+Result: committed 2d85e55737095cffde277d8174b7a26f306ef913
+```
+
+### Artifact Refresh After Commit
+- Cumulative patch must be regenerated after `2d85e55737095cffde277d8174b7a26f306ef913` so it is no longer a 0-byte pre-commit placeholder.
+- The artifact refresh is expected to be committed separately if artifact files changed.
+- Push result will be reported in the final handoff after the refreshed artifact commit is pushed.
