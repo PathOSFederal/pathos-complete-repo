@@ -195,7 +195,69 @@ class SavedSearchIngestedJobRepo:
         ingest_warnings: list[str] | tuple[str, ...],
         seen_at: str,
         sync_run_id: str | None = None,
+        connection: Any | None = None,
     ) -> UpsertOutcome:
+        """Upsert a canonical job, optionally joining a caller-owned transaction."""
+
+        if connection is not None:
+            return SavedSearchIngestedJobRepo._upsert_with_connection(
+                connection,
+                record_id=record_id,
+                saved_search_id=saved_search_id,
+                job_id=job_id,
+                source=source,
+                source_slice=source_slice,
+                mapper_version=mapper_version,
+                query_fingerprint=query_fingerprint,
+                upstream_audit_id=upstream_audit_id,
+                upstream_raw_hash=upstream_raw_hash,
+                canonical_job=canonical_job,
+                ingest_warnings=ingest_warnings,
+                seen_at=seen_at,
+                sync_run_id=sync_run_id,
+            )
+
+        init_db()
+        with connect() as conn:
+            outcome = SavedSearchIngestedJobRepo._upsert_with_connection(
+                conn,
+                record_id=record_id,
+                saved_search_id=saved_search_id,
+                job_id=job_id,
+                source=source,
+                source_slice=source_slice,
+                mapper_version=mapper_version,
+                query_fingerprint=query_fingerprint,
+                upstream_audit_id=upstream_audit_id,
+                upstream_raw_hash=upstream_raw_hash,
+                canonical_job=canonical_job,
+                ingest_warnings=ingest_warnings,
+                seen_at=seen_at,
+                sync_run_id=sync_run_id,
+            )
+            conn.commit()
+            return outcome
+
+    @staticmethod
+    def _upsert_with_connection(
+        conn: Any,
+        *,
+        record_id: str,
+        saved_search_id: str,
+        job_id: str,
+        source: str,
+        source_slice: dict[str, Any],
+        mapper_version: str,
+        query_fingerprint: str,
+        upstream_audit_id: str | None,
+        upstream_raw_hash: str | None,
+        canonical_job: dict[str, Any],
+        ingest_warnings: list[str] | tuple[str, ...],
+        seen_at: str,
+        sync_run_id: str | None = None,
+    ) -> UpsertOutcome:
+        """Apply the canonical upsert using the supplied transaction connection."""
+
         canonical_job_json = SavedSearchIngestedJobRepo._canonical_job_json(canonical_job)
         canonical_job_sha256 = SavedSearchIngestedJobRepo._job_hash(canonical_job_json)
         stored_job_json = SavedSearchIngestedJobRepo._stored_job_json(canonical_job)
@@ -205,140 +267,50 @@ class SavedSearchIngestedJobRepo:
             canonical_job,
             seen_at,
         )
-        init_db()
-        with connect() as conn:
-            existing = conn.execute(
-                """
-                SELECT
-                    id,
-                    canonical_job_sha256,
-                    canonical_job_json,
-                    unchanged_run_count,
-                    first_ingested_at,
-                    lifecycle_state
-                FROM saved_search_ingested_jobs
-                WHERE saved_search_id = ? AND job_id = ?
-                """,
-                (saved_search_id, job_id),
-            ).fetchone()
-            if existing is None:
-                conn.execute(
-                    """
-                    INSERT INTO saved_search_ingested_jobs (
-                        id,
-                        saved_search_id,
-                        job_id,
-                        source,
-                        source_slice_json,
-                        mapper_version,
-                        query_fingerprint,
-                        upstream_audit_id,
-                        upstream_raw_hash,
-                        canonical_job_sha256,
-                        canonical_job_json,
-                        ingest_warnings_json,
-                        lifecycle_state,
-                        closed_at,
-                        first_ingested_at,
-                        last_ingested_at,
-                        last_seen_at,
-                        last_changed_at,
-                        unchanged_run_count
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        record_id,
-                        saved_search_id,
-                        job_id,
-                        source,
-                        source_slice_json,
-                        mapper_version,
-                        query_fingerprint,
-                        upstream_audit_id,
-                        upstream_raw_hash,
-                        canonical_job_sha256,
-                        stored_job_json,
-                        warnings_json,
-                        next_lifecycle_state,
-                        None,
-                        seen_at,
-                        seen_at,
-                        seen_at,
-                        seen_at,
-                        0,
-                    ),
-                )
-                SavedSearchIngestedJobRepo._insert_change_log(
-                    conn,
-                    sync_run_id=sync_run_id,
-                    saved_search_id=saved_search_id,
-                    job_id=job_id,
-                    change_type="new",
-                    changed_fields=SavedSearchIngestedJobRepo._changed_fields({}, canonical_job),
-                    previous_hash=None,
-                    new_hash=canonical_job_sha256,
-                    source_slice_json=source_slice_json,
-                    upstream_audit_id=upstream_audit_id,
-                    created_at=seen_at,
-                )
-                conn.commit()
-                return "new"
-
-            previous_hash = str(existing["canonical_job_sha256"])
-            unchanged_count = int(existing["unchanged_run_count"])
-            previous_lifecycle_state = str(existing["lifecycle_state"])
-            lifecycle_changed = previous_lifecycle_state != next_lifecycle_state
-            if previous_hash == canonical_job_sha256 and not lifecycle_changed:
-                outcome: UpsertOutcome = "unchanged"
-                next_unchanged_count = unchanged_count + 1
-                changed_fields: list[str] = []
-                last_changed_at = None
-                change_type = None
-            else:
-                outcome = "updated"
-                next_unchanged_count = 0
-                previous_job = json.loads(str(existing["canonical_job_json"]))
-                changed_fields = SavedSearchIngestedJobRepo._changed_fields(
-                    previous_job,
-                    canonical_job,
-                )
-                if lifecycle_changed and "lifecycle_state" not in changed_fields:
-                    changed_fields.append("lifecycle_state")
-                last_changed_at = seen_at
-                if previous_lifecycle_state == "closed" and next_lifecycle_state == "open":
-                    change_type = "reopened"
-                    outcome = "reopened"
-                elif next_lifecycle_state == "expired":
-                    change_type = "expired"
-                    outcome = "expired"
-                else:
-                    change_type = "updated"
+        existing = conn.execute(
+            """
+            SELECT
+                id,
+                canonical_job_sha256,
+                canonical_job_json,
+                unchanged_run_count,
+                first_ingested_at,
+                lifecycle_state
+            FROM saved_search_ingested_jobs
+            WHERE saved_search_id = ? AND job_id = ?
+            """,
+            (saved_search_id, job_id),
+        ).fetchone()
+        if existing is None:
             conn.execute(
                 """
-                UPDATE saved_search_ingested_jobs
-                SET
-                    source = ?,
-                    source_slice_json = ?,
-                    mapper_version = ?,
-                    query_fingerprint = ?,
-                    upstream_audit_id = ?,
-                    upstream_raw_hash = ?,
-                    canonical_job_sha256 = ?,
-                    canonical_job_json = ?,
-                    ingest_warnings_json = ?,
-                    lifecycle_state = ?,
-                    closed_at = ?,
-                    last_ingested_at = ?,
-                    last_seen_at = ?,
-                    last_changed_at = CASE
-                        WHEN ? IS NULL THEN last_changed_at
-                        ELSE ?
-                    END,
-                    unchanged_run_count = ?
-                WHERE saved_search_id = ? AND job_id = ?
+                INSERT INTO saved_search_ingested_jobs (
+                    id,
+                    saved_search_id,
+                    job_id,
+                    source,
+                    source_slice_json,
+                    mapper_version,
+                    query_fingerprint,
+                    upstream_audit_id,
+                    upstream_raw_hash,
+                    canonical_job_sha256,
+                    canonical_job_json,
+                    ingest_warnings_json,
+                    lifecycle_state,
+                    closed_at,
+                    first_ingested_at,
+                    last_ingested_at,
+                    last_seen_at,
+                    last_changed_at,
+                    unchanged_run_count
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    record_id,
+                    saved_search_id,
+                    job_id,
                     source,
                     source_slice_json,
                     mapper_version,
@@ -352,29 +324,115 @@ class SavedSearchIngestedJobRepo:
                     None,
                     seen_at,
                     seen_at,
-                    last_changed_at,
-                    last_changed_at,
-                    next_unchanged_count,
-                    saved_search_id,
-                    job_id,
+                    seen_at,
+                    seen_at,
+                    0,
                 ),
             )
-            if outcome in {"updated", "reopened", "expired"}:
-                SavedSearchIngestedJobRepo._insert_change_log(
-                    conn,
-                    sync_run_id=sync_run_id,
-                    saved_search_id=saved_search_id,
-                    job_id=job_id,
-                    change_type=str(change_type),
-                    changed_fields=changed_fields,
-                    previous_hash=previous_hash,
-                    new_hash=canonical_job_sha256,
-                    source_slice_json=source_slice_json,
-                    upstream_audit_id=upstream_audit_id,
-                    created_at=seen_at,
-                )
-            conn.commit()
-            return outcome
+            SavedSearchIngestedJobRepo._insert_change_log(
+                conn,
+                sync_run_id=sync_run_id,
+                saved_search_id=saved_search_id,
+                job_id=job_id,
+                change_type="new",
+                changed_fields=SavedSearchIngestedJobRepo._changed_fields({}, canonical_job),
+                previous_hash=None,
+                new_hash=canonical_job_sha256,
+                source_slice_json=source_slice_json,
+                upstream_audit_id=upstream_audit_id,
+                created_at=seen_at,
+            )
+            return "new"
+
+        previous_hash = str(existing["canonical_job_sha256"])
+        unchanged_count = int(existing["unchanged_run_count"])
+        previous_lifecycle_state = str(existing["lifecycle_state"])
+        lifecycle_changed = previous_lifecycle_state != next_lifecycle_state
+        if previous_hash == canonical_job_sha256 and not lifecycle_changed:
+            outcome: UpsertOutcome = "unchanged"
+            next_unchanged_count = unchanged_count + 1
+            changed_fields: list[str] = []
+            last_changed_at = None
+            change_type = None
+        else:
+            outcome = "updated"
+            next_unchanged_count = 0
+            previous_job = json.loads(str(existing["canonical_job_json"]))
+            changed_fields = SavedSearchIngestedJobRepo._changed_fields(
+                previous_job,
+                canonical_job,
+            )
+            if lifecycle_changed and "lifecycle_state" not in changed_fields:
+                changed_fields.append("lifecycle_state")
+            last_changed_at = seen_at
+            if previous_lifecycle_state == "closed" and next_lifecycle_state == "open":
+                change_type = "reopened"
+                outcome = "reopened"
+            elif next_lifecycle_state == "expired":
+                change_type = "expired"
+                outcome = "expired"
+            else:
+                change_type = "updated"
+        conn.execute(
+            """
+            UPDATE saved_search_ingested_jobs
+            SET
+                source = ?,
+                source_slice_json = ?,
+                mapper_version = ?,
+                query_fingerprint = ?,
+                upstream_audit_id = ?,
+                upstream_raw_hash = ?,
+                canonical_job_sha256 = ?,
+                canonical_job_json = ?,
+                ingest_warnings_json = ?,
+                lifecycle_state = ?,
+                closed_at = ?,
+                last_ingested_at = ?,
+                last_seen_at = ?,
+                last_changed_at = CASE
+                    WHEN ? IS NULL THEN last_changed_at
+                    ELSE ?
+                END,
+                unchanged_run_count = ?
+            WHERE saved_search_id = ? AND job_id = ?
+            """,
+            (
+                source,
+                source_slice_json,
+                mapper_version,
+                query_fingerprint,
+                upstream_audit_id,
+                upstream_raw_hash,
+                canonical_job_sha256,
+                stored_job_json,
+                warnings_json,
+                next_lifecycle_state,
+                None,
+                seen_at,
+                seen_at,
+                last_changed_at,
+                last_changed_at,
+                next_unchanged_count,
+                saved_search_id,
+                job_id,
+            ),
+        )
+        if outcome in {"updated", "reopened", "expired"}:
+            SavedSearchIngestedJobRepo._insert_change_log(
+                conn,
+                sync_run_id=sync_run_id,
+                saved_search_id=saved_search_id,
+                job_id=job_id,
+                change_type=str(change_type),
+                changed_fields=changed_fields,
+                previous_hash=previous_hash,
+                new_hash=canonical_job_sha256,
+                source_slice_json=source_slice_json,
+                upstream_audit_id=upstream_audit_id,
+                created_at=seen_at,
+            )
+        return outcome
 
     @staticmethod
     def preview_outcome(
@@ -412,6 +470,7 @@ class SavedSearchIngestedJobRepo:
         source_slice: dict[str, Any],
         upstream_audit_id: str | None,
         sync_run_id: str | None = None,
+        connection: Any | None = None,
     ) -> int:
         """Close jobs absent from a complete partition and log lifecycle changes."""
 
@@ -422,6 +481,7 @@ class SavedSearchIngestedJobRepo:
             source_slice=source_slice,
             upstream_audit_id=upstream_audit_id,
             sync_run_id=sync_run_id,
+            connection=connection,
         )
         return len(closed_jobs)
 
@@ -434,60 +494,96 @@ class SavedSearchIngestedJobRepo:
         source_slice: dict[str, Any],
         upstream_audit_id: str | None,
         sync_run_id: str | None = None,
+        connection: Any | None = None,
     ) -> list[dict[str, str]]:
         """Close missing jobs and return the exact rows that changed state."""
 
-        source_slice_json = json.dumps(source_slice, sort_keys=True, separators=(",", ":"))
+        if connection is not None:
+            return SavedSearchIngestedJobRepo._mark_missing_as_closed_jobs_with_connection(
+                connection,
+                saved_search_id=saved_search_id,
+                seen_job_ids=seen_job_ids,
+                closed_at=closed_at,
+                source_slice=source_slice,
+                upstream_audit_id=upstream_audit_id,
+                sync_run_id=sync_run_id,
+            )
+
         init_db()
         with connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT job_id, canonical_job_sha256
-                FROM saved_search_ingested_jobs
-                WHERE saved_search_id = ? AND lifecycle_state = 'open'
-                """,
-                (saved_search_id,),
-            ).fetchall()
-            seen_ids = set(seen_job_ids)
-            closed_jobs: list[dict[str, str]] = []
-            for row in rows:
-                job_id = str(row["job_id"])
-                if job_id in seen_ids:
-                    continue
-                previous_hash = str(row["canonical_job_sha256"])
-                conn.execute(
-                    """
-                    UPDATE saved_search_ingested_jobs
-                    SET
-                        lifecycle_state = 'closed',
-                        closed_at = ?,
-                        last_ingested_at = ?,
-                        last_changed_at = ?
-                    WHERE saved_search_id = ? AND job_id = ?
-                    """,
-                    (closed_at, closed_at, closed_at, saved_search_id, job_id),
-                )
-                SavedSearchIngestedJobRepo._insert_change_log(
-                    conn,
-                    sync_run_id=sync_run_id,
-                    saved_search_id=saved_search_id,
-                    job_id=job_id,
-                    change_type="closed",
-                    changed_fields=["lifecycle_state"],
-                    previous_hash=previous_hash,
-                    new_hash=previous_hash,
-                    source_slice_json=source_slice_json,
-                    upstream_audit_id=upstream_audit_id,
-                    created_at=closed_at,
-                )
-                closed_jobs.append(
-                    {
-                        "job_id": job_id,
-                        "canonical_job_sha256": previous_hash,
-                    }
-                )
+            closed_jobs = SavedSearchIngestedJobRepo._mark_missing_as_closed_jobs_with_connection(
+                conn,
+                saved_search_id=saved_search_id,
+                seen_job_ids=seen_job_ids,
+                closed_at=closed_at,
+                source_slice=source_slice,
+                upstream_audit_id=upstream_audit_id,
+                sync_run_id=sync_run_id,
+            )
             conn.commit()
             return closed_jobs
+
+    @staticmethod
+    def _mark_missing_as_closed_jobs_with_connection(
+        conn: Any,
+        *,
+        saved_search_id: str,
+        seen_job_ids: list[str],
+        closed_at: str,
+        source_slice: dict[str, Any],
+        upstream_audit_id: str | None,
+        sync_run_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Apply close-missing lifecycle updates using the supplied transaction."""
+
+        source_slice_json = json.dumps(source_slice, sort_keys=True, separators=(",", ":"))
+        rows = conn.execute(
+            """
+            SELECT job_id, canonical_job_sha256
+            FROM saved_search_ingested_jobs
+            WHERE saved_search_id = ? AND lifecycle_state = 'open'
+            """,
+            (saved_search_id,),
+        ).fetchall()
+        seen_ids = set(seen_job_ids)
+        closed_jobs: list[dict[str, str]] = []
+        for row in rows:
+            job_id = str(row["job_id"])
+            if job_id in seen_ids:
+                continue
+            previous_hash = str(row["canonical_job_sha256"])
+            conn.execute(
+                """
+                UPDATE saved_search_ingested_jobs
+                SET
+                    lifecycle_state = 'closed',
+                    closed_at = ?,
+                    last_ingested_at = ?,
+                    last_changed_at = ?
+                WHERE saved_search_id = ? AND job_id = ?
+                """,
+                (closed_at, closed_at, closed_at, saved_search_id, job_id),
+            )
+            SavedSearchIngestedJobRepo._insert_change_log(
+                conn,
+                sync_run_id=sync_run_id,
+                saved_search_id=saved_search_id,
+                job_id=job_id,
+                change_type="closed",
+                changed_fields=["lifecycle_state"],
+                previous_hash=previous_hash,
+                new_hash=previous_hash,
+                source_slice_json=source_slice_json,
+                upstream_audit_id=upstream_audit_id,
+                created_at=closed_at,
+            )
+            closed_jobs.append(
+                {
+                    "job_id": job_id,
+                    "canonical_job_sha256": previous_hash,
+                }
+            )
+        return closed_jobs
 
     @staticmethod
     def list_change_log(saved_search_id: str) -> list[dict[str, Any]]:

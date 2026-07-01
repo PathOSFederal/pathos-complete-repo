@@ -133,6 +133,18 @@ def _create_saved_search() -> str:
     return created.id
 
 
+def _table_count(table_name: str) -> int:
+    with connect() as conn:
+        return int(conn.execute(f"SELECT COUNT(1) FROM {table_name}").fetchone()[0])
+
+
+def _change_types(saved_search_id: str) -> list[str]:
+    return [
+        str(row["change_type"])
+        for row in SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
+    ]
+
+
 def _day49_payload() -> dict[str, Any]:
     return json.loads(DAY49_FIXTURE_PATH.read_text(encoding="utf-8"))
 
@@ -204,6 +216,119 @@ def test_usajobs_ingestion_service_persists_provenance_summary(monkeypatch, tmp_
     assert payload["source"] == "USAJOBS_OFFICIAL_API"
     assert "USAJOBS_API_KEY" not in json.dumps(payload)
     assert "Authorization" not in json.dumps(payload)
+
+
+def test_usajobs_ingestion_queue_failure_rolls_back_sync_run_and_queue_rows(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_queue_atomic.db"))
+    saved_search_id = _create_saved_search()
+    original_enqueue = USAJobsSyncEventRepo.enqueue
+    calls = {"count": 0}
+
+    def _enqueue_then_fail_on_second_call(**kwargs: Any) -> bool:
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("simulated queue/counter transaction failure")
+        return original_enqueue(**kwargs)
+
+    monkeypatch.setattr(USAJobsSyncEventRepo, "enqueue", _enqueue_then_fail_on_second_call)
+
+    with pytest.raises(RuntimeError, match="simulated queue"):
+        USAJobsIngestionService.ingest_saved_search_results(
+            saved_search_id=saved_search_id,
+            execution=_execution(["J1"]),
+            trigger_mode="saved_search_runner",
+        )
+
+    with connect() as conn:
+        sync_run_count = conn.execute("SELECT COUNT(1) FROM job_sync_runs").fetchone()[0]
+        alert_event_count = conn.execute("SELECT COUNT(1) FROM job_alert_events").fetchone()[0]
+        indexing_event_count = conn.execute(
+            "SELECT COUNT(1) FROM job_page_indexing_events"
+        ).fetchone()[0]
+        canonical_count = conn.execute(
+            "SELECT COUNT(1) FROM saved_search_ingested_jobs WHERE saved_search_id = ?",
+            (saved_search_id,),
+        ).fetchone()[0]
+        change_count = conn.execute(
+            "SELECT COUNT(1) FROM job_change_log WHERE saved_search_id = ?",
+            (saved_search_id,),
+        ).fetchone()[0]
+
+    assert sync_run_count == 0
+    assert alert_event_count == 0
+    assert indexing_event_count == 0
+    assert canonical_count == 0
+    assert change_count == 0
+
+    monkeypatch.setattr(USAJobsSyncEventRepo, "enqueue", original_enqueue)
+    retry_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="saved_search_runner",
+    )
+    assert retry_summary["new_count"] == 1
+    assert retry_summary["alert_events_queued"] == 1
+    assert retry_summary["indexing_events_queued"] == 1
+    assert len(SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)) == 1
+    assert _change_types(saved_search_id) == ["new"]
+
+
+def test_usajobs_ingestion_counter_failure_rolls_back_queue_transaction(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_counter_atomic.db"))
+    saved_search_id = _create_saved_search()
+    original_update = JobSyncRunRepo.update_event_counts
+
+    def _update_then_fail(**kwargs: Any) -> None:
+        original_update(**kwargs)
+        raise RuntimeError("simulated counter update failure")
+
+    monkeypatch.setattr(JobSyncRunRepo, "update_event_counts", _update_then_fail)
+
+    with pytest.raises(RuntimeError, match="simulated counter"):
+        USAJobsIngestionService.ingest_saved_search_results(
+            saved_search_id=saved_search_id,
+            execution=_execution(["J1"]),
+            trigger_mode="saved_search_runner",
+        )
+
+    with connect() as conn:
+        sync_run_count = conn.execute("SELECT COUNT(1) FROM job_sync_runs").fetchone()[0]
+        alert_event_count = conn.execute("SELECT COUNT(1) FROM job_alert_events").fetchone()[0]
+        indexing_event_count = conn.execute(
+            "SELECT COUNT(1) FROM job_page_indexing_events"
+        ).fetchone()[0]
+        canonical_count = conn.execute(
+            "SELECT COUNT(1) FROM saved_search_ingested_jobs WHERE saved_search_id = ?",
+            (saved_search_id,),
+        ).fetchone()[0]
+        change_count = conn.execute(
+            "SELECT COUNT(1) FROM job_change_log WHERE saved_search_id = ?",
+            (saved_search_id,),
+        ).fetchone()[0]
+
+    assert sync_run_count == 0
+    assert alert_event_count == 0
+    assert indexing_event_count == 0
+    assert canonical_count == 0
+    assert change_count == 0
+
+    monkeypatch.setattr(JobSyncRunRepo, "update_event_counts", original_update)
+    retry_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="saved_search_runner",
+    )
+    assert retry_summary["new_count"] == 1
+    assert retry_summary["alert_events_queued"] == 1
+    assert retry_summary["indexing_events_queued"] == 1
+    assert len(SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)) == 1
+    assert _change_types(saved_search_id) == ["new"]
 
 
 def test_usajobs_ingestion_persists_real_normalized_canonical_fields(monkeypatch, tmp_path) -> None:
@@ -651,6 +776,77 @@ def test_usajobs_ingestion_complete_partition_close_marks_lifecycle_and_queues_e
     assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_DELETED"
 
 
+def test_usajobs_ingestion_close_missing_failure_rolls_back_lifecycle(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_close_rollback.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+    original_update = JobSyncRunRepo.update_event_counts
+    before_sync_runs = _table_count("job_sync_runs")
+    before_alert_events = _table_count("job_alert_events")
+    before_indexing_events = _table_count("job_page_indexing_events")
+    before_changes = _change_types(saved_search_id)
+
+    def _update_then_fail(**kwargs: Any) -> None:
+        original_update(**kwargs)
+        raise RuntimeError("simulated close-missing counter failure")
+
+    monkeypatch.setattr(JobSyncRunRepo, "update_event_counts", _update_then_fail)
+
+    with pytest.raises(RuntimeError, match="simulated close-missing"):
+        USAJobsIngestionService.ingest_saved_search_results(
+            saved_search_id=saved_search_id,
+            execution=_execution(["J1"]),
+            trigger_mode="complete_partition_validation",
+            close_missing=True,
+            partition_complete=True,
+            partition_identity=_complete_partition_identity(saved_search_id),
+        )
+
+    rows_after_failure = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    missing_after_failure = [row for row in rows_after_failure if row["job_id"] == "J2"][0]
+    indexing_types_after_failure = [
+        str(row["event_type"])
+        for row in USAJobsSyncEventRepo.list_events("indexing")
+    ]
+
+    assert missing_after_failure["lifecycle_state"] == "open"
+    assert missing_after_failure["closed_at"] is None
+    assert _change_types(saved_search_id) == before_changes
+    assert "URL_DELETED" not in indexing_types_after_failure
+    assert _table_count("job_sync_runs") == before_sync_runs
+    assert _table_count("job_alert_events") == before_alert_events
+    assert _table_count("job_page_indexing_events") == before_indexing_events
+
+    monkeypatch.setattr(JobSyncRunRepo, "update_event_counts", original_update)
+    retry_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="complete_partition_validation",
+        close_missing=True,
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+    closed_after_retry = [
+        row
+        for row in SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+        if row["job_id"] == "J2"
+    ][0]
+
+    assert retry_summary["closed_count"] == 1
+    assert retry_summary["indexing_events_queued"] == 1
+    assert closed_after_retry["lifecycle_state"] == "closed"
+    assert closed_after_retry["closed_at"] == "2026-02-20T00:00:00+00:00"
+    assert "closed" in _change_types(saved_search_id)
+    assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_DELETED"
+
+
 def test_usajobs_ingestion_reappeared_closed_job_logs_reopen_and_queues_update(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_reopened.db"))
     saved_search_id = _create_saved_search()
@@ -685,6 +881,78 @@ def test_usajobs_ingestion_reappeared_closed_job_logs_reopen_and_queues_update(m
     assert reopened["lifecycle_state"] == "open"
     assert reopened["closed_at"] is None
     assert "reopened" in [row["change_type"] for row in changes]
+    assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_UPDATED"
+
+
+def test_usajobs_ingestion_reappeared_failure_rolls_back_reopen(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_reopen_rollback.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="complete_partition_validation",
+        close_missing=True,
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+    original_update = JobSyncRunRepo.update_event_counts
+    before_sync_runs = _table_count("job_sync_runs")
+    before_alert_events = _table_count("job_alert_events")
+    before_indexing_events = _table_count("job_page_indexing_events")
+    before_changes = _change_types(saved_search_id)
+
+    def _update_then_fail(**kwargs: Any) -> None:
+        original_update(**kwargs)
+        raise RuntimeError("simulated reopen counter failure")
+
+    monkeypatch.setattr(JobSyncRunRepo, "update_event_counts", _update_then_fail)
+
+    with pytest.raises(RuntimeError, match="simulated reopen"):
+        USAJobsIngestionService.ingest_saved_search_results(
+            saved_search_id=saved_search_id,
+            execution=_execution(["J1", "J2"]),
+            trigger_mode="complete_partition_validation",
+            partition_complete=True,
+            partition_identity=_complete_partition_identity(saved_search_id),
+        )
+
+    rows_after_failure = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    reappeared_after_failure = [row for row in rows_after_failure if row["job_id"] == "J2"][0]
+
+    assert reappeared_after_failure["lifecycle_state"] == "closed"
+    assert reappeared_after_failure["closed_at"] == "2026-02-20T00:00:00+00:00"
+    assert _change_types(saved_search_id) == before_changes
+    assert _table_count("job_sync_runs") == before_sync_runs
+    assert _table_count("job_alert_events") == before_alert_events
+    assert _table_count("job_page_indexing_events") == before_indexing_events
+
+    monkeypatch.setattr(JobSyncRunRepo, "update_event_counts", original_update)
+    retry_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="complete_partition_validation",
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+    reopened_after_retry = [
+        row
+        for row in SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+        if row["job_id"] == "J2"
+    ][0]
+
+    assert retry_summary["updated_count"] == 1
+    assert retry_summary["indexing_events_queued"] == 1
+    assert reopened_after_retry["lifecycle_state"] == "open"
+    assert reopened_after_retry["closed_at"] is None
+    assert "reopened" in _change_types(saved_search_id)
     assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_UPDATED"
 
 

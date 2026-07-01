@@ -5649,3 +5649,201 @@ artifacts/day-51-this-run.patch - 245548 bytes
 - Day 56 production rollout readiness.
 - Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
 - Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+## 2026-07-01 - Day 52 Schema And Transaction Hardening
+
+### Summary
+- Added Day 52 SQL and Alembic migrations for operational indexes used by USAJOBS sync health, lifecycle, queue, and change-log paths.
+- Preserved database-enforced queue dedupe through unique `dedupe_key` behavior and added repo hardening so invalid queue names are rejected instead of silently routed.
+- Tightened the queue transaction boundary so sync-run creation, queue row insertion, and queue counter updates commit together for the queue phase.
+- Deferred deeper table-rebuild constraints, including a retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints, because those need a dedicated schema rebuild review.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-52-usajobs-sync-schema-hardening with Day 52 backend repo/service/migration/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-52-usajobs-sync-schema-hardening
+
+git diff --name-status develop...HEAD
+Result: 60 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, Day 51, and prior USAJOBS staging-validation lineage; Day 52 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 60 files changed, 466918 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 74 passed, 1 skipped in 54.12s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 358 tests in 9.21s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-52-usajobs-sync-schema-hardening.patch, artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch | Select-Object Name, Length
+artifacts/day-52-usajobs-sync-schema-hardening.patch - 21811304 bytes
+artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 233181 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | USAJOBS write sync -> `JobSyncRunRepo.create` + queue inserts + `JobSyncRunRepo.update_event_counts` run in one queue-phase transaction |
+| Store(s) | `job_sync_runs`, `job_alert_events`, `job_page_indexing_events`, `job_change_log`, `saved_search_ingested_jobs` |
+| Storage key(s) | queue `dedupe_key`; `job_change_log.sync_run_id`; lifecycle/status indexes |
+| Failure mode | Queue rows and sync-run queue counters could drift if insertion or counter update failed partway through |
+| How tested | Migration index assertions, Alembic downgrade assertion, invalid queue-name repo test, queue insertion rollback test, and counter-update rollback test |
+
+### Remaining Day 53+ Blockers
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups: retroactive `job_change_log.sync_run_id` foreign key, CHECK constraints for existing status/event/lifecycle fields, and broader canonical job/change-log transaction boundaries.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 52 schema and transaction hardening: locally validated and merge-ready for Day 52 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 53+ work is complete.
+
+## 2026-07-01 - Day 52 Transaction Consistency Must-Fix Patch
+
+### Summary
+- Patched the Day 52 review blocker: canonical job upserts, lifecycle changes, `job_change_log` rows, sync-run creation, queue row insertion, and queue counter updates now share one non-dry-run write transaction.
+- Queue insertion failure and counter update failure now roll back canonical rows and change-log rows along with sync-run and queue rows.
+- Close-missing lifecycle changes and reappeared-job reopening also roll back with the same transaction if the write phase fails before commit.
+- Added retry-after-rollback assertions so a failed write can be rerun and still create the expected canonical job, change log, and queue events.
+- Expanded Alembic downgrade coverage to assert all seven Day 52 indexes are removed, not just representative indexes.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-52-usajobs-sync-schema-hardening with Day 52 backend repo/service/migration/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-52-usajobs-sync-schema-hardening
+
+git diff --name-status develop...HEAD
+Result: 60 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, Day 51, and prior USAJOBS staging-validation lineage; Day 52 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 60 files changed, 466918 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 76 passed, 1 skipped in 62.67s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 360 tests in 11.11s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-52-usajobs-sync-schema-hardening.patch, artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch | Select-Object Name, Length
+artifacts/day-52-usajobs-sync-schema-hardening.patch - 21811304 bytes
+artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 276702 bytes
+```
+
+### Must-Fix Resolution
+- Canonical job and `job_change_log` writes are now included in the Day 52 write consistency boundary.
+- Queue/counter failures no longer leave canonical rows, change logs, lifecycle changes, sync-run rows, or queue rows behind.
+- Close-missing rollback keeps the missing job open, keeps `closed_at` empty, avoids closed change logs, and avoids `URL_DELETED` queue rows.
+- Reappeared-job rollback keeps the job closed, preserves `closed_at`, avoids reopened change logs, and avoids new `URL_UPDATED` queue rows.
+- Retry after rollback creates the expected canonical rows and queue events.
+- All seven Day 52 downgrade index assertions were added.
+
+### Remaining Day 53+ Blockers
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 52 must-fix patch: locally validated and merge-ready for Day 52 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 53+ work is complete.
+
+## 2026-07-01 - Day 52 Commit Validation
+
+### Summary
+- Final pre-commit validation was rerun for Day 52 schema and transaction hardening.
+- Canonical jobs, change logs, sync runs, queue rows, lifecycle changes, and counters share one write consistency boundary in the non-dry-run ingestion write phase.
+- Retry after rollback is covered by ingestion tests for queue failure, counter failure, close-missing rollback, and reappeared-job rollback.
+- Alembic downgrade coverage asserts all seven Day 52 indexes are removed.
+- Verdict remains merge-ready for Day 52 only.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-52-usajobs-sync-schema-hardening with Day 52 backend repo/service/migration/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and are intentionally not staged.
+
+git branch --show-current
+Result: feature/voloro-day-52-usajobs-sync-schema-hardening
+
+git diff --name-status develop...HEAD
+Result: 60 cumulative backend files changed from develop through the committed Day 47-Day 51 branch lineage. Day 52 working-tree changes are captured in the this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 60 files changed, 466918 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 76 passed, 1 skipped in 53.38s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 360 tests in 9.65s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-52-usajobs-sync-schema-hardening.patch, artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch | Select-Object Name, Length
+artifacts/day-52-usajobs-sync-schema-hardening.patch - 21811304 bytes
+artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 280106 bytes
+```
+
+### Remaining Day 53+ Blockers
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.

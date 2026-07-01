@@ -101,6 +101,10 @@ Alert event dedupe is saved-search-scoped. If two saved searches match the same 
 
 Indexing event dedupe is page/job/content-scoped. `saved_search_id` may appear on the first inserted indexing row as provenance, but it is not part of the indexing dedupe identity. If two saved searches match the same USAJOBS job and content, staging should show two alert rows and one indexing row.
 
+Day 52 hardens the write transaction boundary. Canonical job upserts, lifecycle transitions, `job_change_log` rows, sync-run creation, queue row insertion, and queue counter updates now commit together for the non-dry-run write phase. `job_sync_runs` counters should agree with the actual newly inserted rows in `job_alert_events` and `job_page_indexing_events`, and queue dedupe remains enforced by database-level `dedupe_key` uniqueness. If queue insertion or counter update fails before commit, canonical rows, change logs, lifecycle changes, the sync-run row, and queue rows roll back together. A retry can then insert the canonical job and expected queue events normally instead of seeing a half-written job as unchanged.
+
+Day 52 also adds operational indexes for change-log sync run lookup, change type lookup, ingested job lifecycle lookup, ingested job id lookup, and sync-run status/source status lookup. Deeper table-rebuild constraints such as adding a retroactive `job_change_log.sync_run_id` foreign key are intentionally deferred until a later schema rebuild can be reviewed separately.
+
 It does not mark missing jobs closed because a 1-2 page staging partition is not a complete USAJOBS partition.
 
 ## Lifecycle And Close-Missing Safety

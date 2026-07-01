@@ -73,6 +73,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; migration pytest; targeted repo pytest.
 - Acceptance criteria: schema integrity aligns with backend conventions; rollback/downgrade behavior is documented and reasonable.
 - Explicit non-goals: no table renames that would churn production planning without need.
+- Day 52 status: implemented in this branch with a new SQL and Alembic migration for operational indexes, direct migration assertions, database-enforced queue dedupe preserved, invalid queue-name rejection, and a write transaction boundary that commits canonical job upserts, lifecycle changes, `job_change_log` rows, sync-run creation, queue row insertion, and queue counter updates together. Rollback tests cover queue insertion failure, counter update failure, close-missing lifecycle rollback, reappeared-job rollback, and retry-after-rollback behavior. Deeper table-rebuild constraints, including a retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing tables, remain deferred until they can be reviewed as a dedicated schema rebuild.
 
 ## Day 53: Full Pytest Runtime Triage
 

@@ -76,6 +76,25 @@ def test_migration_runner_applies_and_is_idempotent(tmp_path) -> None:
             assert _index_columns(conn, f"{prefix}_saved_search") == [
                 "saved_search_id"
             ]
+        assert _index_columns(conn, "idx_job_change_log_sync_run") == [
+            "sync_run_id"
+        ]
+        assert _index_columns(conn, "idx_job_change_log_change_type") == [
+            "change_type"
+        ]
+        assert _index_columns(conn, "idx_job_change_log_job") == ["job_id"]
+        assert _index_columns(
+            conn,
+            "idx_saved_search_ingested_jobs_lifecycle",
+        ) == ["lifecycle_state"]
+        assert _index_columns(conn, "idx_saved_search_ingested_jobs_job") == [
+            "job_id"
+        ]
+        assert _index_columns(conn, "idx_job_sync_runs_status") == ["status"]
+        assert _index_columns(conn, "idx_job_sync_runs_source_status") == [
+            "source",
+            "status",
+        ]
 
 
 def test_recent_repo_methods_work_after_migrations(monkeypatch, tmp_path) -> None:

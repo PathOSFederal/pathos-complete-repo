@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.db.repo.job_sync_run_repo import JobSyncRunRepo
 from app.db.repo.usajobs_sync_event_repo import QueueName, USAJobsSyncEventRepo
 from app.models.job_search import JobSearchRequest
@@ -133,3 +135,32 @@ def test_usajobs_sync_event_repo_alert_dedupe_is_saved_search_scoped(
         first_saved_search_id,
         second_saved_search_id,
     }
+
+
+def test_usajobs_sync_event_repo_rejects_invalid_queue_name(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "queue_repo_invalid.db"))
+    _sync_run("sync-invalid-queue", None)
+
+    with pytest.raises(ValueError, match="queue_name"):
+        USAJobsSyncEventRepo.enqueue(
+            queue_name="notifications",
+            sync_run_id="sync-invalid-queue",
+            saved_search_id=None,
+            source_job_id="J1",
+            canonical_job_id="J1",
+            event_type="URL_UPDATED",
+            reason="invalid_queue_test",
+            payload_summary={
+                "source": "USAJOBS_OFFICIAL_API",
+                "source_job_id": "J1",
+                "canonical_hash": "hash-1",
+            },
+            dedupe_key="invalid:J1:hash-1",
+            created_at="2026-02-20T00:00:00+00:00",
+        )
+
+    assert USAJobsSyncEventRepo.list_events("alert") == []
+    assert USAJobsSyncEventRepo.list_events("indexing") == []

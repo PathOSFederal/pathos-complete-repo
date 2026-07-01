@@ -9,6 +9,7 @@ import json
 from typing import Any
 from uuid import uuid4
 
+from app.db.connection import connect, init_db
 from app.db.repo.job_sync_run_repo import JobSyncRunRepo
 from app.db.repo.saved_search_ingested_job_repo import SavedSearchIngestedJobRepo
 from app.db.repo.usajobs_sync_event_repo import USAJobsSyncEventRepo
@@ -150,16 +151,37 @@ class USAJobsIngestionService:
         }
         seen_job_ids: list[str] = []
         queue_candidates: list[dict[str, Any]] = []
-        for normalized in execution.normalized_items:
-            seen_job_ids.append(normalized.job.id)
-            source_slice = dict(execution.query_slice)
-            source_slice["trigger_mode"] = trigger_mode
-            source_slice["saved_search_id"] = saved_search_id
-            canonical_job = normalized.job.model_dump(mode="json")
-            canonical_hash = SavedSearchIngestedJobRepo.canonical_hash(canonical_job)
-            if dry_run:
-                outcome = "new"
-            else:
+
+        if dry_run:
+            for normalized in execution.normalized_items:
+                seen_job_ids.append(normalized.job.id)
+                summary["new_count"] = int(summary["new_count"]) + 1
+                summary["warning_count"] = int(summary["warning_count"]) + len(
+                    normalized.warnings
+                )
+            close_guard = USAJobsIngestionService._close_missing_guard(
+                close_missing=close_missing,
+                dry_run=dry_run,
+                trigger_mode=trigger_mode,
+                partition_complete=partition_complete,
+                partition_identity=partition_identity,
+                execution=execution,
+            )
+            if close_missing:
+                summary["close_missing_skipped"] = True
+                summary["close_missing_skip_reason"] = close_guard["reason"]
+                summary["stale_partitions"].append(close_guard["stale_partition"])
+            return summary
+
+        init_db()
+        with connect() as conn:
+            for normalized in execution.normalized_items:
+                seen_job_ids.append(normalized.job.id)
+                source_slice = dict(execution.query_slice)
+                source_slice["trigger_mode"] = trigger_mode
+                source_slice["saved_search_id"] = saved_search_id
+                canonical_job = normalized.job.model_dump(mode="json")
+                canonical_hash = SavedSearchIngestedJobRepo.canonical_hash(canonical_job)
                 outcome = SavedSearchIngestedJobRepo.upsert(
                     record_id=str(uuid4()),
                     saved_search_id=saved_search_id,
@@ -174,6 +196,7 @@ class USAJobsIngestionService:
                     ingest_warnings=list(normalized.warnings),
                     seen_at=execution.fetched_at,
                     sync_run_id=sync_run_id,
+                    connection=conn,
                 )
                 if outcome in {"new", "updated", "reopened", "expired"}:
                     queue_candidates.append(
@@ -185,50 +208,50 @@ class USAJobsIngestionService:
                             "outcome": outcome,
                         }
                     )
-            summary_outcome = "updated" if outcome in {"reopened", "expired"} else outcome
-            summary_key = f"{summary_outcome}_count"
-            summary[summary_key] = int(summary[summary_key]) + 1
-            summary["warning_count"] = int(summary["warning_count"]) + len(
-                normalized.warnings
-            )
-        close_guard = USAJobsIngestionService._close_missing_guard(
-            close_missing=close_missing,
-            dry_run=dry_run,
-            trigger_mode=trigger_mode,
-            partition_complete=partition_complete,
-            partition_identity=partition_identity,
-            execution=execution,
-        )
-        if close_guard["allowed"]:
-            source_slice = dict(execution.query_slice)
-            source_slice["trigger_mode"] = trigger_mode
-            source_slice["saved_search_id"] = saved_search_id
-            source_slice["partition_identity"] = partition_identity
-            closed_jobs = SavedSearchIngestedJobRepo.mark_missing_as_closed_jobs(
-                saved_search_id=saved_search_id,
-                seen_job_ids=seen_job_ids,
-                closed_at=execution.fetched_at,
-                source_slice=source_slice,
-                upstream_audit_id=execution.upstream_audit_id,
-                sync_run_id=sync_run_id,
-            )
-            closed_count = len(closed_jobs)
-            summary["closed_count"] = closed_count
-            for closed_job in closed_jobs:
-                queue_candidates.append(
-                    {
-                        "source_job_id": closed_job["job_id"],
-                        "canonical_job_id": closed_job["job_id"],
-                        "canonical_hash": closed_job["canonical_job_sha256"],
-                        "canonical_job": None,
-                        "outcome": "closed",
-                    }
+                summary_outcome = "updated" if outcome in {"reopened", "expired"} else outcome
+                summary_key = f"{summary_outcome}_count"
+                summary[summary_key] = int(summary[summary_key]) + 1
+                summary["warning_count"] = int(summary["warning_count"]) + len(
+                    normalized.warnings
                 )
-        elif close_missing:
-            summary["close_missing_skipped"] = True
-            summary["close_missing_skip_reason"] = close_guard["reason"]
-            summary["stale_partitions"].append(close_guard["stale_partition"])
-        if not dry_run:
+            close_guard = USAJobsIngestionService._close_missing_guard(
+                close_missing=close_missing,
+                dry_run=dry_run,
+                trigger_mode=trigger_mode,
+                partition_complete=partition_complete,
+                partition_identity=partition_identity,
+                execution=execution,
+            )
+            if close_guard["allowed"]:
+                source_slice = dict(execution.query_slice)
+                source_slice["trigger_mode"] = trigger_mode
+                source_slice["saved_search_id"] = saved_search_id
+                source_slice["partition_identity"] = partition_identity
+                closed_jobs = SavedSearchIngestedJobRepo.mark_missing_as_closed_jobs(
+                    saved_search_id=saved_search_id,
+                    seen_job_ids=seen_job_ids,
+                    closed_at=execution.fetched_at,
+                    source_slice=source_slice,
+                    upstream_audit_id=execution.upstream_audit_id,
+                    sync_run_id=sync_run_id,
+                    connection=conn,
+                )
+                closed_count = len(closed_jobs)
+                summary["closed_count"] = closed_count
+                for closed_job in closed_jobs:
+                    queue_candidates.append(
+                        {
+                            "source_job_id": closed_job["job_id"],
+                            "canonical_job_id": closed_job["job_id"],
+                            "canonical_hash": closed_job["canonical_job_sha256"],
+                            "canonical_job": None,
+                            "outcome": "closed",
+                        }
+                    )
+            elif close_missing:
+                summary["close_missing_skipped"] = True
+                summary["close_missing_skip_reason"] = close_guard["reason"]
+                summary["stale_partitions"].append(close_guard["stale_partition"])
             completed_at = datetime.now(timezone.utc).isoformat()
             duration_ms = int((time.monotonic() - started) * 1000)
             JobSyncRunRepo.create(
@@ -252,21 +275,25 @@ class USAJobsIngestionService:
                     "indexing_events_queued": 0,
                     "duration_ms": duration_ms,
                     "error_summary": None,
-                }
+                },
+                connection=conn,
             )
             queued_counts = USAJobsIngestionService._queue_events(
                 sync_run_id=sync_run_id,
                 saved_search_id=saved_search_id,
                 queued_at=completed_at,
                 candidates=queue_candidates,
+                connection=conn,
             )
-            summary["alert_events_queued"] = queued_counts["alert"]
-            summary["indexing_events_queued"] = queued_counts["indexing"]
             JobSyncRunRepo.update_event_counts(
                 sync_run_id=sync_run_id,
-                alert_events_queued=summary["alert_events_queued"],
-                indexing_events_queued=summary["indexing_events_queued"],
+                alert_events_queued=queued_counts["alert"],
+                indexing_events_queued=queued_counts["indexing"],
+                connection=conn,
             )
+            conn.commit()
+            summary["alert_events_queued"] = queued_counts["alert"]
+            summary["indexing_events_queued"] = queued_counts["indexing"]
         return summary
 
     @staticmethod
@@ -321,6 +348,7 @@ class USAJobsIngestionService:
         saved_search_id: str,
         queued_at: str,
         candidates: list[dict[str, Any]],
+        connection: Any | None = None,
     ) -> dict[str, int]:
         """Persist queue-only alert/indexing rows and count new insertions."""
 
@@ -377,6 +405,7 @@ class USAJobsIngestionService:
                     canonical_hash=canonical_hash,
                 ),
                 created_at=queued_at,
+                connection=connection,
             )
             if alert_inserted:
                 queued_counts["alert"] += 1
@@ -397,6 +426,7 @@ class USAJobsIngestionService:
                     lifecycle_event=dedupe_lifecycle_event,
                 ),
                 created_at=queued_at,
+                connection=connection,
             )
             if indexing_inserted:
                 queued_counts["indexing"] += 1

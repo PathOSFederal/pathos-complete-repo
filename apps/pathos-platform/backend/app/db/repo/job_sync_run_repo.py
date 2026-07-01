@@ -159,58 +159,66 @@ class JobSyncRunRepo:
     """Persist and expose staging-safe sync run health records."""
 
     @staticmethod
-    def create(record: dict[str, Any]) -> None:
+    def _insert(conn: Any, record: dict[str, Any]) -> None:
+        conn.execute(
+            """
+            INSERT INTO job_sync_runs (
+                id,
+                saved_search_id,
+                source,
+                trigger_mode,
+                run_mode,
+                status,
+                started_at,
+                completed_at,
+                records_fetched,
+                new_jobs,
+                updated_jobs,
+                unchanged_jobs,
+                closed_jobs,
+                failed_partitions_json,
+                stale_partitions_json,
+                alert_events_queued,
+                indexing_events_queued,
+                duration_ms,
+                error_summary
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record["id"],
+                record.get("saved_search_id"),
+                record["source"],
+                record["trigger_mode"],
+                record["run_mode"],
+                record["status"],
+                record["started_at"],
+                record["completed_at"],
+                int(record["records_fetched"]),
+                int(record["new_jobs"]),
+                int(record["updated_jobs"]),
+                int(record["unchanged_jobs"]),
+                int(record["closed_jobs"]),
+                json.dumps(record.get("failed_partitions", []), sort_keys=True),
+                json.dumps(record.get("stale_partitions", []), sort_keys=True),
+                int(record["alert_events_queued"]),
+                int(record["indexing_events_queued"]),
+                int(record["duration_ms"]),
+                record.get("error_summary"),
+            ),
+        )
+
+    @staticmethod
+    def create(record: dict[str, Any], *, connection: Any | None = None) -> None:
         """Insert one sync run summary row."""
+
+        if connection is not None:
+            JobSyncRunRepo._insert(connection, record)
+            return
 
         init_db()
         with connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO job_sync_runs (
-                    id,
-                    saved_search_id,
-                    source,
-                    trigger_mode,
-                    run_mode,
-                    status,
-                    started_at,
-                    completed_at,
-                    records_fetched,
-                    new_jobs,
-                    updated_jobs,
-                    unchanged_jobs,
-                    closed_jobs,
-                    failed_partitions_json,
-                    stale_partitions_json,
-                    alert_events_queued,
-                    indexing_events_queued,
-                    duration_ms,
-                    error_summary
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record["id"],
-                    record.get("saved_search_id"),
-                    record["source"],
-                    record["trigger_mode"],
-                    record["run_mode"],
-                    record["status"],
-                    record["started_at"],
-                    record["completed_at"],
-                    int(record["records_fetched"]),
-                    int(record["new_jobs"]),
-                    int(record["updated_jobs"]),
-                    int(record["unchanged_jobs"]),
-                    int(record["closed_jobs"]),
-                    json.dumps(record.get("failed_partitions", []), sort_keys=True),
-                    json.dumps(record.get("stale_partitions", []), sort_keys=True),
-                    int(record["alert_events_queued"]),
-                    int(record["indexing_events_queued"]),
-                    int(record["duration_ms"]),
-                    record.get("error_summary"),
-                ),
-            )
+            JobSyncRunRepo._insert(conn, record)
             conn.commit()
 
     @staticmethod
@@ -219,8 +227,22 @@ class JobSyncRunRepo:
         sync_run_id: str,
         alert_events_queued: int,
         indexing_events_queued: int,
+        connection: Any | None = None,
     ) -> None:
         """Update queue counters after deduped outbox insertion completes."""
+
+        if connection is not None:
+            connection.execute(
+                """
+                UPDATE job_sync_runs
+                SET
+                    alert_events_queued = ?,
+                    indexing_events_queued = ?
+                WHERE id = ?
+                """,
+                (int(alert_events_queued), int(indexing_events_queued), sync_run_id),
+            )
+            return
 
         init_db()
         with connect() as conn:
