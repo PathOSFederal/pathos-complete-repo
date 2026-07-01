@@ -38,7 +38,14 @@ def _safe_job_payload(
         "canonical_hash": canonical_hash,
     }
     if canonical_job is not None:
-        for field_name in ("title", "organization", "close_date", "remote_status"):
+        for field_name in (
+            "title",
+            "organization",
+            "close_date",
+            "remote_status",
+            "telework_status",
+            "source_url",
+        ):
             value = canonical_job.get(field_name)
             if value is not None:
                 payload[field_name] = value
@@ -164,7 +171,7 @@ class USAJobsIngestionService:
                 if outcome in {"new", "updated"}:
                     queue_candidates.append(
                         {
-                            "source_job_id": normalized.job.id,
+                            "source_job_id": normalized.job.source_job_id or normalized.job.id,
                             "canonical_job_id": normalized.job.id,
                             "canonical_hash": canonical_hash,
                             "canonical_job": canonical_job,

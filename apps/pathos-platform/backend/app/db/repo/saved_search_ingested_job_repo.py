@@ -62,14 +62,24 @@ class SavedSearchIngestedJobRepo:
         comparable_fields = [
             "title",
             "organization",
+            "agency",
+            "department",
+            "series",
+            "pay_plan",
             "locations",
             "compensation",
             "open_date",
             "close_date",
             "apply_url",
+            "source_url",
             "remote_status",
+            "telework_status",
             "documents",
             "qualifications",
+            "duties",
+            "who_may_apply",
+            "hiring_path",
+            "status",
         ]
         changed: list[str] = []
         for field_name in comparable_fields:

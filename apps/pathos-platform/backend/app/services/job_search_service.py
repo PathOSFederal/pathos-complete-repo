@@ -421,7 +421,7 @@ class JobSearchService:
             normalized_items = [
                 row
                 for row in normalized_items
-                if any("remote" in location.lower() for location in row.job.locations)
+                if row.job.remote_status == "remote"
             ]
 
         total_raw = envelope.SearchResult.SearchResultCountAll

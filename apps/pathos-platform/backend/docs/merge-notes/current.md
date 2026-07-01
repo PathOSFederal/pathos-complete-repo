@@ -5056,3 +5056,172 @@ artifacts/day-48-this-run.patch - 267525 bytes
 ### Final Day 48 Verdict
 - Day 48 queue persistence and dedupe slice: merge-ready.
 - External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+## 2026-07-01 - Day 49 USAJOBS Canonical Normalization
+
+### Branch
+```text
+feature/voloro-day-49-usajobs-canonical-normalization
+```
+
+### Summary
+- Hardened USAJOBS canonical normalization so production ingestion now carries real fields from official USAJOBS Search API-shaped payloads.
+- Added canonical fields for source job id, announcement number, agency, department, series, pay plan, remote status, telework status, source URL, documents, qualifications, duties, who-may-apply, hiring path, and status.
+- Kept telework separate from fully remote classification. Telework eligibility and location-negotiable text do not become fully remote jobs.
+- Preserved official USAJOBS apply and source links.
+- Added real fixture coverage for canonical normalization, hash stability, persisted canonical JSON, normalized-field change logs, queue compatibility, and dry-run suppression.
+- External delivery remains disabled: no email send, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-49-usajobs-canonical-normalization with Day 49 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-49-usajobs-canonical-normalization
+
+git diff --name-status develop...HEAD
+Result: 47 cumulative backend files changed from develop through the current committed branch lineage. Because Day 49 is intentionally uncommitted, the Day 49 working-tree files are captured in the this-run artifact and working-tree diff, not in develop...HEAD.
+
+git diff --stat develop...HEAD
+Result: 47 files changed, 51477 insertions(+), 149 deletions(-)
+
+git diff --name-status
+Result: Day 49 backend working-tree files changed/new include:
+M apps/pathos-platform/backend/app/adapters/usajobs/models.py
+M apps/pathos-platform/backend/app/adapters/usajobs/normalize.py
+M apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
+M apps/pathos-platform/backend/app/domain/jobs/canonical_models.py
+M apps/pathos-platform/backend/app/services/job_search_service.py
+M apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
+A apps/pathos-platform/backend/docs/change-briefs/day-49-usajobs-canonical-normalization.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+M apps/pathos-platform/backend/docs/roadmaps/usajobs-sync-production-readiness-days.md
+M apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+M apps/pathos-platform/backend/tests/api/jobs/test__positive__normalize.py
+A apps/pathos-platform/backend/tests/fixtures/usajobs_search_day49_canonical.json
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+
+git diff --stat
+Result: backend Day 49 files plus unrelated dirty frontend files are present in the wider worktree. Backend Day 49 scope is limited to USAJOBS adapter/domain/service/repo tests/docs/fixtures.
+```
+
+### Validation Commands
+```text
+poetry run ruff check app/adapters/usajobs/normalize.py app/services/usajobs_ingestion_service.py tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py
+Result: passed, All checks passed!
+
+poetry run mypy app/adapters/usajobs app/domain/jobs app/db/repo/saved_search_ingested_job_repo.py app/services/usajobs_ingestion_service.py app/services/job_search_service.py tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py
+Result: passed, Success: no issues found in 14 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 39 passed, 1 skipped in 35.73s.
+
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 339 tests in 11.16s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Notes On Validation
+- An initial parallel pytest attempt hit a Windows `.coverage` file permission collision before one command could start; the affected test slice was rerun by itself and passed.
+- Full pytest execution was not run for Day 49 because this prompt explicitly scoped validation to targeted tests and collect-only while preserving the existing full-suite timeout triage for Day 53.
+
+### Patch Artifacts
+```text
+artifacts/day-49-usajobs-canonical-normalization.patch - 2381853 bytes
+artifacts/day-49-usajobs-canonical-normalization-this-run.patch - 256606 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API-shaped payload -> adapter model validation -> canonical normalizer -> job search execution result -> ingestion persistence/change log -> Day 48 queue rows |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Canonical jobs could miss trust-critical fields, misclassify telework as remote, miss meaningful content changes, or queue events from incomplete canonical content |
+| How tested | Automated pytest for real-shaped fixture normalization, remote/telework separation, hash stability, persisted canonical JSON, normalized-field change logs, queue compatibility, and dry-run suppression |
+
+### Remaining Day 50+ Blockers
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening, including counter atomicity and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract alignment.
+- Production rollout readiness.
+
+### Merge Readiness
+- Day 49 canonical normalization slice: merge-ready for review after local validation.
+- Overall USAJOBS production readiness remains not merge-ready until Day 50+ work is complete.
+
+## 2026-07-01 - Day 49 Final Commit Readiness
+
+### Summary
+- Final pre-commit validation completed for Day 49 USAJOBS canonical normalization.
+- Day 49 remains merge-ready for the canonical normalization slice only.
+- Overall USAJOBS production readiness remains blocked by Day 50+ work.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-49-usajobs-canonical-normalization with Day 49 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and must not be staged.
+
+git branch --show-current
+Result: feature/voloro-day-49-usajobs-canonical-normalization
+
+git diff --name-status develop...HEAD
+Result: 47 cumulative backend files changed from develop through the current committed branch lineage. Day 49 working-tree changes are captured in the Day 49 this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 47 files changed, 51477 insertions(+), 149 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 39 passed, 1 skipped in 46.33s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 339 tests in 17.06s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-49-usajobs-canonical-normalization.patch - 2381853 bytes
+artifacts/day-49-usajobs-canonical-normalization-this-run.patch - 253403 bytes
+```
+
+### Day 49 Follow-ups
+- Add telework negative phrase handling later so text like "telework not available" does not become telework eligible.
+- Decide and document whether `source.mapper_version` should force canonical hash changes and re-indexing; exclude it in a later hardening slice if not.
+- Add an explicit JSON key-order hash stability test.
+
+### Remaining Day 50+ Blockers
+- Lifecycle close-missing guards.
+- Ops health tests.
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+
+### Final Day 49 Verdict
+- Day 49 canonical normalization slice: merge-ready.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.

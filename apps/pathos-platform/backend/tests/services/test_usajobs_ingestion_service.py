@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -30,6 +33,8 @@ from app.services.job_search_service import JobSearchUpstreamSchemaError
 from app.services.job_search_service import JobSearchUpstreamUnavailableError
 from app.services.saved_search_service import SavedSearchService
 from app.services.usajobs_ingestion_service import USAJobsIngestionService
+
+DAY49_FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "usajobs_search_day49_canonical.json"
 
 
 def _canonical_job(
@@ -98,6 +103,18 @@ def _create_saved_search() -> str:
     return created.id
 
 
+def _day49_payload() -> dict[str, Any]:
+    return json.loads(DAY49_FIXTURE_PATH.read_text(encoding="utf-8"))
+
+
+def _day49_single_item_payload(*, item_index: int = 0) -> dict[str, Any]:
+    payload = _day49_payload()
+    item = deepcopy(payload["SearchResult"]["SearchResultItems"][item_index])
+    payload["SearchResult"]["SearchResultCountAll"] = 1
+    payload["SearchResult"]["SearchResultItems"] = [item]
+    return payload
+
+
 def test_usajobs_ingestion_service_enforces_official_source(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_source_guard.db"))
     saved_search_id = _create_saved_search()
@@ -157,6 +174,134 @@ def test_usajobs_ingestion_service_persists_provenance_summary(monkeypatch, tmp_
     assert payload["source"] == "USAJOBS_OFFICIAL_API"
     assert "USAJOBS_API_KEY" not in json.dumps(payload)
     assert "Authorization" not in json.dumps(payload)
+
+
+def test_usajobs_ingestion_persists_real_normalized_canonical_fields(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_day49_canonical.db"))
+    monkeypatch.setenv("USAJOBS_API_KEY", "key")
+    monkeypatch.setenv("USAJOBS_USER_AGENT", "tests@example.com")
+    saved_search_id = _create_saved_search()
+
+    execution = JobSearchService.execute_search(
+        search=JobSearchRequest(keyword="it", page=1, page_size=5),
+        request_id="req-day49-canonical",
+        client=_FakeUSAJobsClient(_day49_payload()),
+        allow_cache=False,
+        record_upstream_audit=False,
+    )
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=execution,
+        trigger_mode="saved_search_runner",
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    remote_row = [
+        row
+        for row in rows
+        if row["job_id"] == "800000001"
+    ][0]
+    canonical_job = json.loads(remote_row["canonical_job_json"])
+
+    assert summary["new_count"] == 5
+    assert summary["alert_events_queued"] == 5
+    assert summary["indexing_events_queued"] == 5
+    assert len(rows) == 5
+    assert canonical_job["source_job_id"] == "800000001"
+    assert canonical_job["announcement_number"] == "DE-800000001-26"
+    assert canonical_job["agency"] == "Office of Personnel Management"
+    assert canonical_job["department"] == "Office of Personnel Management"
+    assert canonical_job["series"] == ["2210"]
+    assert canonical_job["pay_plan"] == "GS"
+    assert canonical_job["remote_status"] == "remote"
+    assert canonical_job["telework_status"] == "not_eligible"
+    assert canonical_job["documents"] == ["Resume", "SF-50"]
+    assert canonical_job["qualifications"] == [
+        "Experience with secure cloud delivery is qualifying.",
+        "Must be able to obtain a public trust clearance.",
+        "One year of specialized experience supporting federal IT systems.",
+    ]
+    assert canonical_job["source_url"] == "https://www.usajobs.gov/job/800000001"
+    assert canonical_job["apply_url"] == "https://www.usajobs.gov/job/800000001/apply"
+
+
+def test_usajobs_ingestion_normalized_field_change_logs_and_queues(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_day49_update.db"))
+    monkeypatch.setenv("USAJOBS_API_KEY", "key")
+    monkeypatch.setenv("USAJOBS_USER_AGENT", "tests@example.com")
+    saved_search_id = _create_saved_search()
+    first_payload = _day49_single_item_payload()
+    second_payload = _day49_single_item_payload()
+    details = second_payload["SearchResult"]["SearchResultItems"][0]["MatchedObjectDescriptor"]["UserArea"]["Details"]
+    details["RequiredDocuments"] = "<ul><li>Resume</li><li>SF-50</li><li>Transcripts</li></ul>"
+    details["QualificationsRequired"] = "Two years of specialized experience supporting federal IT systems."
+
+    first_execution = JobSearchService.execute_search(
+        search=JobSearchRequest(keyword="it", page=1, page_size=1),
+        request_id="req-day49-change-1",
+        client=_FakeUSAJobsClient(first_payload),
+        allow_cache=False,
+        record_upstream_audit=False,
+    )
+    second_execution = JobSearchService.execute_search(
+        search=JobSearchRequest(keyword="it", page=1, page_size=1),
+        request_id="req-day49-change-2",
+        client=_FakeUSAJobsClient(second_payload),
+        allow_cache=False,
+        record_upstream_audit=False,
+    )
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=first_execution,
+        trigger_mode="saved_search_runner",
+    )
+    second_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=second_execution,
+        trigger_mode="saved_search_runner",
+    )
+    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
+    updated_change = [
+        row
+        for row in changes
+        if row["change_type"] == "updated"
+    ][0]
+
+    assert second_summary["updated_count"] == 1
+    assert second_summary["alert_events_queued"] == 1
+    assert second_summary["indexing_events_queued"] == 1
+    assert json.loads(updated_change["changed_fields_json"]) == [
+        "documents",
+        "qualifications",
+    ]
+    assert len(USAJobsSyncEventRepo.list_events("alert")) == 2
+    assert len(USAJobsSyncEventRepo.list_events("indexing")) == 2
+
+
+def test_usajobs_ingestion_dry_run_with_real_payload_writes_no_rows(monkeypatch, tmp_path) -> None:
+    db_path = tmp_path / "ingestion_day49_dry_run.db"
+    monkeypatch.setenv("PATHOS_DB_PATH", str(db_path))
+    monkeypatch.setenv("USAJOBS_API_KEY", "key")
+    monkeypatch.setenv("USAJOBS_USER_AGENT", "tests@example.com")
+
+    execution = JobSearchService.execute_search(
+        search=JobSearchRequest(keyword="it", page=1, page_size=5),
+        request_id="req-day49-dry",
+        client=_FakeUSAJobsClient(_day49_payload()),
+        allow_cache=False,
+        record_upstream_audit=False,
+    )
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id="dry-run-day49",
+        execution=execution,
+        trigger_mode="staging_validation",
+        dry_run=True,
+    )
+
+    assert summary["dry_run"] is True
+    assert summary["records_fetched"] == 5
+    assert summary["alert_events_queued"] == 0
+    assert summary["indexing_events_queued"] == 0
+    assert not db_path.exists()
 
 
 def test_usajobs_ingestion_dry_run_does_not_create_database(monkeypatch, tmp_path) -> None:

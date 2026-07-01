@@ -46,6 +46,23 @@ Expected output:
 - `alert_events_queued` is `0`.
 - `indexing_events_queued` is `0`.
 
+## Canonical Normalization Checks
+
+Day 49 hardens the production normalizer so staging validation inspects real canonical fields from official USAJOBS Search API payloads rather than ad hoc test-only fields. Canonical rows should include:
+
+- source job id and announcement number,
+- title, agency, department, series, grade/pay plan, and salary range,
+- normalized locations,
+- separate `remote_status` and `telework_status`,
+- open and close dates,
+- official USAJOBS apply URL and source announcement URL,
+- documents, qualifications, duties, who-may-apply, and hiring path when USAJOBS provides them,
+- lifecycle status and stable content hash.
+
+Telework eligibility must not be treated as fully remote. `location negotiable after selection` must not be treated as fully remote either; it remains a separate normalized remote status.
+
+The canonical content hash is derived from normalized canonical job content with observation-only source fields, such as `source.retrieved_at`, excluded. It is expected to change when meaningful fields such as title, agency, locations, remote/telework status, salary, dates, documents, qualifications, duties, or official URLs change. It should not change because of JSON key ordering, fetch timestamp, sync run id, or ignored upstream metadata.
+
 ## Limited Staging Write Sync
 
 Use a deliberately small partition: series `2210`, Florida, last 7 days, maximum 1-2 pages.

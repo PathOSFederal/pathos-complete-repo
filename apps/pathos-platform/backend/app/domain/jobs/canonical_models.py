@@ -15,6 +15,8 @@ WHAT THIS FILE MUST NOT DO:
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -39,11 +41,26 @@ class CanonicalJob(BaseModel):
     """Canonical job entity returned from job-search APIs."""
 
     id: str = Field(min_length=1)
+    source_job_id: str | None = None
+    announcement_number: str | None = None
     title: str = Field(min_length=1)
     organization: str = Field(min_length=1)
+    agency: str | None = None
+    department: str | None = None
+    series: list[str] = Field(default_factory=list)
+    pay_plan: str | None = None
     locations: list[str] = Field(default_factory=list)
     compensation: CanonicalCompensation
+    remote_status: Literal["remote", "onsite", "location_negotiable", "unknown"] = "unknown"
+    telework_status: Literal["eligible", "not_eligible", "unknown"] = "unknown"
     open_date: str | None = None
     close_date: str | None = None
     apply_url: str = Field(min_length=1)
+    source_url: str | None = None
+    documents: list[str] = Field(default_factory=list)
+    qualifications: list[str] = Field(default_factory=list)
+    duties: list[str] = Field(default_factory=list)
+    who_may_apply: list[str] = Field(default_factory=list)
+    hiring_path: list[str] = Field(default_factory=list)
+    status: Literal["open", "closed", "unknown"] = "open"
     source: CanonicalSourceMetadata

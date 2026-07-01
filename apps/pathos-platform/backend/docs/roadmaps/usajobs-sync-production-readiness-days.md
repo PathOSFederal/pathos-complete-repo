@@ -37,6 +37,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; targeted USAJOBS normalization and ingestion pytest.
 - Acceptance criteria: production canonical objects include the fields that change detection hashes and compares; explicit USAJOBS remote indicators are used where available; official source and apply-link assumptions remain intact.
 - Explicit non-goals: no scraping; no new non-USAJOBS source ingestion.
+- Day 49 status: implemented in this branch with real USAJOBS-shaped fixture coverage for canonical fields, remote/telework separation, official apply/source links, document and qualification normalization, stable content hashing, persisted canonical JSON, change logs, queue compatibility, and dry-run suppression. Follow-ups preserved for later hardening: add negative telework phrase handling so text like "telework not available" does not become telework eligible; decide whether `source.mapper_version` should force canonical hash changes and re-indexing; add an explicit JSON key-order hash stability test. Day 50 lifecycle guards remain separate.
 
 ## Day 50: Closed-Job And Partial-Partition Lifecycle Guards
 

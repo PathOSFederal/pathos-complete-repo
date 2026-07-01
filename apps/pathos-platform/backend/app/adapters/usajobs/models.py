@@ -17,6 +17,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class USAJobsCodeName(BaseModel):
+    """Partial code/name pair used by USAJOBS for series, grade, and hiring paths."""
+
+    Code: str | None = None
+    Name: str | None = None
+
+
 class USAJobsRemuneration(BaseModel):
     """Partial salary payload from USAJOBS."""
 
@@ -35,12 +42,22 @@ class USAJobsDetails(BaseModel):
 
     LowGrade: str | None = None
     HighGrade: str | None = None
+    JobCategory: list[USAJobsCodeName] | None = None
+    JobGrade: list[USAJobsCodeName] | None = None
+    DepartmentName: str | None = None
     PositionURI: str | None = None
     ApplyURI: list[str] | None = None
     RemoteIndicator: bool | None = None
     TeleworkEligible: bool | None = None
     PublicationStartDate: str | None = None
     ApplicationCloseDate: str | None = None
+    MajorDuties: str | list[str] | None = None
+    RequiredDocuments: str | list[str] | None = None
+    QualificationsRequired: str | list[str] | None = None
+    QualificationSummary: str | list[str] | None = None
+    Requirements: str | list[str] | None = None
+    WhoMayApply: str | list[str] | None = None
+    HiringPath: list[USAJobsCodeName] | None = None
 
 
 class USAJobsUserArea(BaseModel):
@@ -55,6 +72,9 @@ class USAJobsDescriptor(BaseModel):
     PositionID: str | None = None
     PositionTitle: str | None = None
     OrganizationName: str | None = None
+    DepartmentName: str | None = None
+    JobCategory: list[USAJobsCodeName] | None = None
+    JobGrade: list[USAJobsCodeName] | None = None
     PositionLocationDisplay: str | None = None
     PositionLocation: list[USAJobsLocation] | None = None
     PositionRemuneration: list[USAJobsRemuneration] | None = None
