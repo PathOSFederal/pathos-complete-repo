@@ -13,9 +13,11 @@ from app.adapters.usajobs.errors import (
 )
 from app.adapters.usajobs.normalize import NormalizedUSAJobsItem
 from app.adapters.usajobs.types import USAJobsSearchResponse, UpstreamAuditSummary
+from app.db.connection import connect
 from app.db.repo.job_sync_run_repo import JobSyncRunRepo
 from app.db.repo.saved_search_ingested_job_repo import SavedSearchIngestedJobRepo
 from app.db.repo.upstream_audit_repo import UpstreamAuditRepo
+from app.db.repo.usajobs_sync_event_repo import USAJobsSyncEventRepo
 from app.domain.jobs.canonical_models import CanonicalCompensation, CanonicalJob, CanonicalSourceMetadata
 from app.models.job_search import JobSearchRequest, JobSearchResponse
 from app.models.saved_search import SavedSearchCreateRequest
@@ -118,18 +120,43 @@ def test_usajobs_ingestion_service_persists_provenance_summary(monkeypatch, tmp_
         trigger_mode="saved_search_runner",
     )
     rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    alert_events = USAJobsSyncEventRepo.list_events("alert")
+    indexing_events = USAJobsSyncEventRepo.list_events("indexing")
+    health = JobSyncRunRepo.latest_health()
 
     assert summary["new_count"] == 2
     assert summary["updated_count"] == 0
     assert summary["unchanged_count"] == 0
     assert summary["warning_count"] == 1
+    assert summary["alert_events_queued"] == 2
+    assert summary["indexing_events_queued"] == 2
+    assert health["alert_events_queued"] == 2
+    assert health["indexing_events_queued"] == 2
     assert len(rows) == 2
+    assert [row["event_type"] for row in alert_events] == [
+        "SAVED_SEARCH_JOB_NEW",
+        "SAVED_SEARCH_JOB_NEW",
+    ]
+    assert [row["event_type"] for row in indexing_events] == [
+        "URL_UPDATED",
+        "URL_UPDATED",
+    ]
+    assert {row["status"] for row in alert_events + indexing_events} == {"queued"}
+    with connect() as conn:
+        alerts_count = conn.execute("SELECT COUNT(1) FROM alerts").fetchone()[0]
+        delivery_count = conn.execute("SELECT COUNT(1) FROM alert_delivery_log").fetchone()[0]
+    assert alerts_count == 0
+    assert delivery_count == 0
     first_slice = json.loads(rows[0]["source_slice_json"])
     assert first_slice["trigger_mode"] == "saved_search_runner"
     assert first_slice["query_fingerprint"] == "fp-1"
     assert rows[0]["source"] == "USAJOBS_OFFICIAL_API"
     assert rows[0]["mapper_version"] == "usajobs-normalize-v1"
     assert rows[0]["lifecycle_state"] == "open"
+    payload = json.loads(alert_events[0]["payload_summary_json"])
+    assert payload["source"] == "USAJOBS_OFFICIAL_API"
+    assert "USAJOBS_API_KEY" not in json.dumps(payload)
+    assert "Authorization" not in json.dumps(payload)
 
 
 def test_usajobs_ingestion_dry_run_does_not_create_database(monkeypatch, tmp_path) -> None:
@@ -196,10 +223,116 @@ def test_usajobs_ingestion_repeat_sync_ignores_retrieved_at_only_change(monkeypa
     changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
 
     assert first_summary["new_count"] == 1
+    assert first_summary["alert_events_queued"] == 1
+    assert first_summary["indexing_events_queued"] == 1
     assert second_summary["unchanged_count"] == 1
     assert second_summary["updated_count"] == 0
+    assert second_summary["alert_events_queued"] == 0
+    assert second_summary["indexing_events_queued"] == 0
     assert int(rows[0]["unchanged_run_count"]) == 1
     assert [row["change_type"] for row in changes] == ["new"]
+    assert len(USAJobsSyncEventRepo.list_events("alert")) == 1
+    assert len(USAJobsSyncEventRepo.list_events("indexing")) == 1
+
+
+def test_usajobs_ingestion_indexing_dedupe_spans_saved_searches(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_cross_search_indexing.db"))
+    first_saved_search_id = _create_saved_search()
+    second_saved_search_id = _create_saved_search()
+    execution = _execution(["J1"])
+
+    first_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=first_saved_search_id,
+        execution=execution,
+        trigger_mode="saved_search_runner",
+    )
+    second_summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=second_saved_search_id,
+        execution=execution,
+        trigger_mode="saved_search_runner",
+    )
+    first_repeat = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=first_saved_search_id,
+        execution=execution,
+        trigger_mode="saved_search_runner",
+    )
+    second_repeat = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=second_saved_search_id,
+        execution=execution,
+        trigger_mode="saved_search_runner",
+    )
+    alert_events = USAJobsSyncEventRepo.list_events("alert")
+    indexing_events = USAJobsSyncEventRepo.list_events("indexing")
+
+    assert first_summary["alert_events_queued"] == 1
+    assert first_summary["indexing_events_queued"] == 1
+    assert second_summary["alert_events_queued"] == 1
+    assert second_summary["indexing_events_queued"] == 0
+    assert first_repeat["alert_events_queued"] == 0
+    assert first_repeat["indexing_events_queued"] == 0
+    assert second_repeat["alert_events_queued"] == 0
+    assert second_repeat["indexing_events_queued"] == 0
+    assert len(alert_events) == 2
+    assert len(indexing_events) == 1
+    assert {row["saved_search_id"] for row in alert_events} == {
+        first_saved_search_id,
+        second_saved_search_id,
+    }
+    assert indexing_events[0]["source_job_id"] == "J1"
+
+
+def test_usajobs_ingestion_updated_job_queues_url_updated_and_alert(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_updated_events.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="saved_search_runner",
+    )
+    updated_job = _canonical_job("J1", title="Senior Analyst")
+    updated_execution = JobSearchExecutionResult(
+        response=JobSearchResponse(
+            results=[updated_job],
+            total=1,
+            page=1,
+            page_size=20,
+            request_id="req-updated",
+        ),
+        normalized_items=(NormalizedUSAJobsItem(job=updated_job, warnings=()),),
+        query_fingerprint="fp-1",
+        mapper_version="usajobs-normalize-v1",
+        source_name="USAJOBS_OFFICIAL_API",
+        fetched_at="2026-02-20T00:30:00+00:00",
+        upstream_audit_id="audit-updated",
+        upstream_raw_hash="raw-updated",
+        query_slice={
+            "page": 1,
+            "page_size": 20,
+            "remote_only": False,
+            "query_fingerprint": "fp-1",
+        },
+    )
+
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=updated_execution,
+        trigger_mode="saved_search_runner",
+    )
+    alert_events = USAJobsSyncEventRepo.list_events("alert")
+    indexing_events = USAJobsSyncEventRepo.list_events("indexing")
+
+    assert summary["updated_count"] == 1
+    assert summary["alert_events_queued"] == 1
+    assert summary["indexing_events_queued"] == 1
+    assert [row["event_type"] for row in alert_events] == [
+        "SAVED_SEARCH_JOB_NEW",
+        "SAVED_SEARCH_JOB_UPDATED",
+    ]
+    assert [row["event_type"] for row in indexing_events] == [
+        "URL_UPDATED",
+        "URL_UPDATED",
+    ]
+    assert json.loads(alert_events[-1]["payload_summary_json"])["title"] == "Senior Analyst"
 
 
 def test_usajobs_ingestion_close_missing_marks_lifecycle_and_queues_events(monkeypatch, tmp_path) -> None:
@@ -227,6 +360,8 @@ def test_usajobs_ingestion_close_missing_marks_lifecycle_and_queues_events(monke
     assert closed["lifecycle_state"] == "closed"
     assert closed["closed_at"] == "2026-02-20T00:00:00+00:00"
     assert [row["change_type"] for row in changes].count("closed") == 1
+    assert USAJobsSyncEventRepo.list_events("alert")[-1]["event_type"] == "SAVED_SEARCH_JOB_CLOSED"
+    assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_DELETED"
 
 
 def test_usajobs_ingestion_failed_partition_records_health(monkeypatch, tmp_path) -> None:

@@ -4850,3 +4850,209 @@ artifacts/day-47-usajobs-sync-safety-gates-this-run.patch - 251600 bytes
 - Schema hardening.
 - Full pytest runtime triage.
 - Actual staging dry-run/write/repeat validation.
+
+## 2026-07-01 - Day 48 USAJOBS Sync Event Queues
+
+### Branch
+```text
+feature/voloro-day-48-usajobs-sync-event-queues
+```
+
+### Summary
+- Added durable queue-only rows for USAJOBS sync alert and indexing events.
+- Added `job_alert_events` and `job_page_indexing_events` with unique `dedupe_key` values and indexes by sync run, status, event type, job id, and saved search id.
+- Updated USAJOBS ingestion so new and updated jobs queue `URL_UPDATED` indexing events and saved-search alert events.
+- Updated close-missing handling so closed jobs queue `URL_DELETED` indexing events and closed-job alert events.
+- `job_sync_runs.alert_events_queued` and `job_sync_runs.indexing_events_queued` now count newly inserted queue rows for that run; deduped repeats do not inflate counters.
+- External delivery remains disabled: no email send, no Google Indexing API submission, no IndexNow submission, no scheduler change, and no scraping.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-48-usajobs-sync-event-queues with Day 48 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-48-usajobs-sync-event-queues
+
+git diff --name-status develop...HEAD
+Result: 39 cumulative backend files changed from develop through the current branch lineage. This includes the committed Day 47 baseline plus existing USAJOBS staging-validation lineage; Day 48 working-tree files add the queue migration, queue repo, ingestion queue wiring, docs, and tests.
+
+git diff --stat develop...HEAD
+Result: 39 files changed, 21549 insertions(+), 149 deletions(-)
+
+git diff --stat
+Result: 17 files changed, 4929 insertions(+), 555 deletions(-). This includes Day 48 backend files plus unrelated dirty frontend files in the wider worktree; frontend files are not part of Day 48.
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 226 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 26 passed, 1 skipped in 23.67s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 329 tests in 12.28s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-48.patch - 1018273 bytes
+artifacts/day-48-this-run.patch - 249255 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API fetch -> ingestion write outcome -> deduped `job_alert_events`/`job_page_indexing_events` queue rows -> `job_sync_runs` counters updated from inserted row counts |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Queue rows missing or duplicated would make staging alert/indexing validation unauditable and could inflate operator health counters |
+| How tested | Automated pytest for new/updated/closed queue events, repeat-run dedupe, dry-run suppression, no legacy alert delivery rows, and migration creation |
+
+### Remaining Day 49+ Blockers
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+### Merge Readiness
+- Day 48 slice: implementation complete and locally validated; ready for code review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 49+ work is complete.
+
+## 2026-07-01 - Day 48 Must-Fix: Indexing Dedupe Scope
+
+### Summary
+- Patched the Day 48 queue identity split so alert events remain saved-search-scoped while page indexing events are job/page/content-scoped.
+- `saved_search_id` is no longer part of the indexing dedupe identity. It may remain on the first inserted indexing row only as provenance.
+- Two saved searches matching the same USAJOBS job/content now create two alert rows and one indexing row.
+- Repeat unchanged syncs do not duplicate alert or indexing queue rows and do not inflate queue counters.
+- Added direct queue repo tests for `ON CONFLICT(dedupe_key) DO NOTHING` behavior and migration-runner assertions for queue dedupe uniqueness and operational indexes.
+- Counter atomicity was deferred to Day 52 schema/transaction hardening rather than broadening this must-fix patch.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-48-usajobs-sync-event-queues with Day 48 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-48-usajobs-sync-event-queues
+
+git diff --name-status develop...HEAD
+Result: 39 cumulative backend files changed from develop through the current branch lineage. This includes committed Day 47 and prior USAJOBS staging-validation lineage; Day 48 working-tree queue files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 39 files changed, 21549 insertions(+), 149 deletions(-)
+
+git diff --name-status
+Result: Day 48 backend queue files changed/new, including the new queue migrations, `USAJobsSyncEventRepo`, ingestion service queue wiring, Day 48 docs, migration tests, ingestion tests, and `tests/db/repo/test_usajobs_sync_event_repo.py`. Unrelated frontend dirty files are also present in the wider worktree and are not part of Day 48.
+
+git diff --stat
+Result: 19 files changed, 5267 insertions(+), 557 deletions(-). This includes Day 48 backend files plus unrelated dirty frontend files in the wider worktree; frontend files are not part of Day 48.
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 27 passed, 1 skipped in 26.14s.
+
+poetry run pytest tests/db/repo/test_usajobs_sync_event_repo.py -q --cov=app --cov-fail-under=0
+Result: passed, 2 passed in 8.30s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 332 tests in 9.57s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-48.patch - 1018273 bytes
+artifacts/day-48-this-run.patch - 265040 bytes
+```
+
+### Remaining Day 49+ Blockers
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening, including queue counter atomicity/transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+### Merge Readiness
+- Day 48 must-fix verdict: merge-ready for the queue event and dedupe slice after this patch.
+- Overall USAJOBS production readiness remains not merge-ready until Day 49+ work is complete.
+
+## 2026-07-01 - Day 48 Final Commit Readiness
+
+### Summary
+- Final pre-commit validation completed for Day 48 USAJOBS sync event queues.
+- Day 48 remains merge-ready for the queue persistence and dedupe slice only.
+- Overall USAJOBS production readiness remains blocked by Day 49+ work.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-48-usajobs-sync-event-queues with Day 48 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not staged.
+
+git branch --show-current
+Result: feature/voloro-day-48-usajobs-sync-event-queues
+
+git diff --name-status develop...HEAD
+Result: 39 cumulative backend files changed from develop through the current branch lineage. This includes committed Day 47 and prior USAJOBS staging-validation lineage; Day 48 working-tree queue files are captured in the Day 48 artifacts.
+
+git diff --stat develop...HEAD
+Result: 39 files changed, 21549 insertions(+), 149 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 29 passed, 1 skipped in 27.61s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 332 tests in 9.45s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-48.patch - 1018273 bytes
+artifacts/day-48-this-run.patch - 267525 bytes
+```
+
+### Remaining Day 49+ Blockers
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening, including counter atomicity and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+### Final Day 48 Verdict
+- Day 48 queue persistence and dedupe slice: merge-ready.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.

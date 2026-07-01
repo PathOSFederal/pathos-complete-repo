@@ -42,6 +42,13 @@ class SavedSearchIngestedJobRepo:
         return sha256(canonical_job_json.encode("utf-8")).hexdigest()
 
     @staticmethod
+    def canonical_hash(canonical_job: dict[str, Any]) -> str:
+        """Return the stable content hash used for meaningful change detection."""
+
+        canonical_job_json = SavedSearchIngestedJobRepo._canonical_job_json(canonical_job)
+        return SavedSearchIngestedJobRepo._job_hash(canonical_job_json)
+
+    @staticmethod
     def _stored_job_json(canonical_job: dict[str, Any]) -> str:
         return json.dumps(canonical_job, sort_keys=True, separators=(",", ":"))
 
@@ -372,6 +379,28 @@ class SavedSearchIngestedJobRepo:
     ) -> int:
         """Close jobs absent from a complete partition and log lifecycle changes."""
 
+        closed_jobs = SavedSearchIngestedJobRepo.mark_missing_as_closed_jobs(
+            saved_search_id=saved_search_id,
+            seen_job_ids=seen_job_ids,
+            closed_at=closed_at,
+            source_slice=source_slice,
+            upstream_audit_id=upstream_audit_id,
+            sync_run_id=sync_run_id,
+        )
+        return len(closed_jobs)
+
+    @staticmethod
+    def mark_missing_as_closed_jobs(
+        *,
+        saved_search_id: str,
+        seen_job_ids: list[str],
+        closed_at: str,
+        source_slice: dict[str, Any],
+        upstream_audit_id: str | None,
+        sync_run_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        """Close missing jobs and return the exact rows that changed state."""
+
         source_slice_json = json.dumps(source_slice, sort_keys=True, separators=(",", ":"))
         init_db()
         with connect() as conn:
@@ -384,7 +413,7 @@ class SavedSearchIngestedJobRepo:
                 (saved_search_id,),
             ).fetchall()
             seen_ids = set(seen_job_ids)
-            closed_count = 0
+            closed_jobs: list[dict[str, str]] = []
             for row in rows:
                 job_id = str(row["job_id"])
                 if job_id in seen_ids:
@@ -415,9 +444,14 @@ class SavedSearchIngestedJobRepo:
                     upstream_audit_id=upstream_audit_id,
                     created_at=closed_at,
                 )
-                closed_count += 1
+                closed_jobs.append(
+                    {
+                        "job_id": job_id,
+                        "canonical_job_sha256": previous_hash,
+                    }
+                )
             conn.commit()
-            return closed_count
+            return closed_jobs
 
     @staticmethod
     def list_change_log(saved_search_id: str) -> list[dict[str, Any]]:

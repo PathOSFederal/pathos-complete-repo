@@ -25,6 +25,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; targeted queue/sync pytest; migration tests.
 - Acceptance criteria: repeat unchanged sync does not create duplicate queue events; updated/closed jobs create the expected queued event rows; staging does not deliver email or call external indexing APIs unless explicit delivery flags are enabled.
 - Explicit non-goals: no provider delivery implementation changes beyond gating and queue safety.
+- Day 48 status: implemented in this branch with `job_alert_events`, `job_page_indexing_events`, deterministic dedupe keys, inserted-row counter semantics, and tests for queue creation, cross-saved-search indexing dedupe, dry-run suppression, and no legacy delivery rows. Alert dedupe is saved-search-scoped; indexing dedupe is page/job/content-scoped and does not include `saved_search_id`.
 
 ## Day 49: Canonical USAJOBS Field Normalization
 
@@ -63,9 +64,9 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 
 - Branch: `feature/voloro-day-52-usajobs-sync-schema-hardening`
 - Goal: strengthen schema constraints, indexes, relationships, and rollback behavior for sync validation tables.
-- Issues addressed: `job_change_log.sync_run_id` has no FK/index; lifecycle/status/change fields lack CHECK constraints.
+- Issues addressed: `job_change_log.sync_run_id` has no FK/index; lifecycle/status/change fields lack CHECK constraints; queue counter updates should be hardened into a single transaction with queue row creation where practical.
 - Files likely touched: SQL migration, Alembic revision, repo tests, migration tests.
-- Tests to add or update: migration apply/rollback tests; constraint/index existence tests; invalid enum/status rejection tests where supported.
+- Tests to add or update: migration apply/rollback tests; constraint/index existence tests; invalid enum/status rejection tests where supported; counter atomicity tests if the repo transaction boundary is tightened.
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; migration pytest; targeted repo pytest.
 - Acceptance criteria: schema integrity aligns with backend conventions; rollback/downgrade behavior is documented and reasonable.
 - Explicit non-goals: no table renames that would churn production planning without need.

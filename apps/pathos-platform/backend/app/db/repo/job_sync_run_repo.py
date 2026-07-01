@@ -67,6 +67,29 @@ class JobSyncRunRepo:
             conn.commit()
 
     @staticmethod
+    def update_event_counts(
+        *,
+        sync_run_id: str,
+        alert_events_queued: int,
+        indexing_events_queued: int,
+    ) -> None:
+        """Update queue counters after deduped outbox insertion completes."""
+
+        init_db()
+        with connect() as conn:
+            conn.execute(
+                """
+                UPDATE job_sync_runs
+                SET
+                    alert_events_queued = ?,
+                    indexing_events_queued = ?
+                WHERE id = ?
+                """,
+                (int(alert_events_queued), int(indexing_events_queued), sync_run_id),
+            )
+            conn.commit()
+
+    @staticmethod
     def latest_health() -> dict[str, Any]:
         """Return the latest sync health shape expected by staging operators."""
 

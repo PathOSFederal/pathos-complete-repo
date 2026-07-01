@@ -4,14 +4,93 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
+from hashlib import sha256
+import json
 from typing import Any
 from uuid import uuid4
 
 from app.db.repo.job_sync_run_repo import JobSyncRunRepo
 from app.db.repo.saved_search_ingested_job_repo import SavedSearchIngestedJobRepo
+from app.db.repo.usajobs_sync_event_repo import USAJobsSyncEventRepo
 from app.services.job_search_service import JobSearchExecutionResult
 
 OFFICIAL_USAJOBS_SOURCE = "USAJOBS_OFFICIAL_API"
+INDEXING_URL_UPDATED = "URL_UPDATED"
+INDEXING_URL_DELETED = "URL_DELETED"
+ALERT_JOB_NEW = "SAVED_SEARCH_JOB_NEW"
+ALERT_JOB_UPDATED = "SAVED_SEARCH_JOB_UPDATED"
+ALERT_JOB_CLOSED = "SAVED_SEARCH_JOB_CLOSED"
+
+
+def _safe_job_payload(
+    *,
+    canonical_job: dict[str, Any] | None,
+    source_job_id: str,
+    change_type: str,
+    canonical_hash: str,
+) -> dict[str, Any]:
+    """Build an audit summary without raw USAJOBS payloads or credentials."""
+
+    payload: dict[str, Any] = {
+        "source": OFFICIAL_USAJOBS_SOURCE,
+        "source_job_id": source_job_id,
+        "change_type": change_type,
+        "canonical_hash": canonical_hash,
+    }
+    if canonical_job is not None:
+        for field_name in ("title", "organization", "close_date", "remote_status"):
+            value = canonical_job.get(field_name)
+            if value is not None:
+                payload[field_name] = value
+        locations = canonical_job.get("locations")
+        if isinstance(locations, list):
+            payload["location_count"] = len(locations)
+    return payload
+
+
+def _hashed_dedupe_key(identity: dict[str, Any]) -> str:
+    """Hash stable event identity fields into a compact database key."""
+
+    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+    return "usajobs-sync:" + sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _alert_dedupe_key(
+    *,
+    event_type: str,
+    saved_search_id: str,
+    source_job_id: str,
+    canonical_hash: str,
+) -> str:
+    """Alert identity is saved-search scoped because subscribers differ."""
+
+    identity = {
+        "queue": "alert",
+        "event_type": event_type,
+        "saved_search_id": saved_search_id,
+        "source_job_id": source_job_id,
+        "canonical_hash": canonical_hash,
+    }
+    return _hashed_dedupe_key(identity)
+
+
+def _indexing_dedupe_key(
+    *,
+    event_type: str,
+    source_job_id: str,
+    canonical_job_id: str,
+    canonical_hash: str,
+) -> str:
+    """Indexing identity is page/job/content scoped, not saved-search scoped."""
+
+    identity = {
+        "queue": "indexing",
+        "event_type": event_type,
+        "source_job_id": source_job_id,
+        "canonical_job_id": canonical_job_id,
+        "canonical_hash": canonical_hash,
+    }
+    return _hashed_dedupe_key(identity)
 
 
 class USAJobsIngestionService:
@@ -56,12 +135,14 @@ class USAJobsIngestionService:
             "indexing_events_queued": 0,
         }
         seen_job_ids: list[str] = []
+        queue_candidates: list[dict[str, Any]] = []
         for normalized in execution.normalized_items:
             seen_job_ids.append(normalized.job.id)
             source_slice = dict(execution.query_slice)
             source_slice["trigger_mode"] = trigger_mode
             source_slice["saved_search_id"] = saved_search_id
             canonical_job = normalized.job.model_dump(mode="json")
+            canonical_hash = SavedSearchIngestedJobRepo.canonical_hash(canonical_job)
             if dry_run:
                 outcome = "new"
             else:
@@ -80,6 +161,16 @@ class USAJobsIngestionService:
                     seen_at=execution.fetched_at,
                     sync_run_id=sync_run_id,
                 )
+                if outcome in {"new", "updated"}:
+                    queue_candidates.append(
+                        {
+                            "source_job_id": normalized.job.id,
+                            "canonical_job_id": normalized.job.id,
+                            "canonical_hash": canonical_hash,
+                            "canonical_job": canonical_job,
+                            "outcome": outcome,
+                        }
+                    )
             summary_key = f"{outcome}_count"
             summary[summary_key] = int(summary[summary_key]) + 1
             summary["warning_count"] = int(summary["warning_count"]) + len(
@@ -89,7 +180,7 @@ class USAJobsIngestionService:
             source_slice = dict(execution.query_slice)
             source_slice["trigger_mode"] = trigger_mode
             source_slice["saved_search_id"] = saved_search_id
-            closed_count = SavedSearchIngestedJobRepo.mark_missing_as_closed(
+            closed_jobs = SavedSearchIngestedJobRepo.mark_missing_as_closed_jobs(
                 saved_search_id=saved_search_id,
                 seen_job_ids=seen_job_ids,
                 closed_at=execution.fetched_at,
@@ -97,17 +188,21 @@ class USAJobsIngestionService:
                 upstream_audit_id=execution.upstream_audit_id,
                 sync_run_id=sync_run_id,
             )
+            closed_count = len(closed_jobs)
             summary["closed_count"] = closed_count
-            summary["alert_events_queued"] = closed_count
-            summary["indexing_events_queued"] = closed_count
+            for closed_job in closed_jobs:
+                queue_candidates.append(
+                    {
+                        "source_job_id": closed_job["job_id"],
+                        "canonical_job_id": closed_job["job_id"],
+                        "canonical_hash": closed_job["canonical_job_sha256"],
+                        "canonical_job": None,
+                        "outcome": "closed",
+                    }
+                )
         if not dry_run:
             completed_at = datetime.now(timezone.utc).isoformat()
             duration_ms = int((time.monotonic() - started) * 1000)
-            event_count = int(summary["new_count"]) + int(summary["updated_count"]) + int(
-                summary["closed_count"]
-            )
-            summary["alert_events_queued"] = event_count
-            summary["indexing_events_queued"] = event_count
             JobSyncRunRepo.create(
                 {
                     "id": sync_run_id,
@@ -125,13 +220,100 @@ class USAJobsIngestionService:
                     "closed_jobs": summary["closed_count"],
                     "failed_partitions": summary["failed_partitions"],
                     "stale_partitions": summary["stale_partitions"],
-                    "alert_events_queued": summary["alert_events_queued"],
-                    "indexing_events_queued": summary["indexing_events_queued"],
+                    "alert_events_queued": 0,
+                    "indexing_events_queued": 0,
                     "duration_ms": duration_ms,
                     "error_summary": None,
                 }
             )
+            queued_counts = USAJobsIngestionService._queue_events(
+                sync_run_id=sync_run_id,
+                saved_search_id=saved_search_id,
+                queued_at=completed_at,
+                candidates=queue_candidates,
+            )
+            summary["alert_events_queued"] = queued_counts["alert"]
+            summary["indexing_events_queued"] = queued_counts["indexing"]
+            JobSyncRunRepo.update_event_counts(
+                sync_run_id=sync_run_id,
+                alert_events_queued=summary["alert_events_queued"],
+                indexing_events_queued=summary["indexing_events_queued"],
+            )
         return summary
+
+    @staticmethod
+    def _queue_events(
+        *,
+        sync_run_id: str,
+        saved_search_id: str,
+        queued_at: str,
+        candidates: list[dict[str, Any]],
+    ) -> dict[str, int]:
+        """Persist queue-only alert/indexing rows and count new insertions."""
+
+        queued_counts = {"alert": 0, "indexing": 0}
+        for candidate in candidates:
+            outcome = str(candidate["outcome"])
+            source_job_id = str(candidate["source_job_id"])
+            canonical_hash = str(candidate["canonical_hash"])
+            canonical_job = candidate["canonical_job"]
+            if outcome == "closed":
+                alert_event_type = ALERT_JOB_CLOSED
+                indexing_event_type = INDEXING_URL_DELETED
+                reason = "closed_missing_from_complete_partition"
+            elif outcome == "updated":
+                alert_event_type = ALERT_JOB_UPDATED
+                indexing_event_type = INDEXING_URL_UPDATED
+                reason = "meaningful_canonical_update"
+            else:
+                alert_event_type = ALERT_JOB_NEW
+                indexing_event_type = INDEXING_URL_UPDATED
+                reason = "new_canonical_job"
+            payload_summary = _safe_job_payload(
+                canonical_job=canonical_job,
+                source_job_id=source_job_id,
+                change_type=outcome,
+                canonical_hash=canonical_hash,
+            )
+            alert_inserted = USAJobsSyncEventRepo.enqueue(
+                queue_name="alert",
+                sync_run_id=sync_run_id,
+                saved_search_id=saved_search_id,
+                source_job_id=source_job_id,
+                canonical_job_id=str(candidate["canonical_job_id"]),
+                event_type=alert_event_type,
+                reason=reason,
+                payload_summary=payload_summary,
+                dedupe_key=_alert_dedupe_key(
+                    event_type=alert_event_type,
+                    saved_search_id=saved_search_id,
+                    source_job_id=source_job_id,
+                    canonical_hash=canonical_hash,
+                ),
+                created_at=queued_at,
+            )
+            if alert_inserted:
+                queued_counts["alert"] += 1
+            indexing_inserted = USAJobsSyncEventRepo.enqueue(
+                queue_name="indexing",
+                sync_run_id=sync_run_id,
+                saved_search_id=saved_search_id,
+                source_job_id=source_job_id,
+                canonical_job_id=str(candidate["canonical_job_id"]),
+                event_type=indexing_event_type,
+                reason=reason,
+                payload_summary=payload_summary,
+                dedupe_key=_indexing_dedupe_key(
+                    event_type=indexing_event_type,
+                    source_job_id=source_job_id,
+                    canonical_job_id=str(candidate["canonical_job_id"]),
+                    canonical_hash=canonical_hash,
+                ),
+                created_at=queued_at,
+            )
+            if indexing_inserted:
+                queued_counts["indexing"] += 1
+        return queued_counts
 
     @staticmethod
     def record_failed_partition(

@@ -20,10 +20,10 @@ Stale updates are reduced by hashing only meaningful canonical job fields. A ref
 
 Expired or closed jobs are handled through an explicit close-missing mode. Limited staging validation does not close missing jobs because a 1-2 page slice is not a complete partition.
 
-Alert and indexing behavior is queue/accounting-only for this staging validation slice. The change records queued-event counts but does not send real email and does not call external indexing APIs.
+Alert and indexing behavior is queue-only for this staging validation slice. The sync now records durable, deduped queue rows for alert and indexing work, but it does not send real email and does not call external indexing APIs.
 
 ## What Remains Before Production
 
-Before production, operators still need real queue rows with dedupe, canonical USAJOBS field normalization, a final approved staging write run, a repeat-run idempotency check, review of the sync health output, and confirmation that production scheduler settings remain unchanged.
+Before production, operators still need canonical USAJOBS field normalization, a final approved staging write run, a repeat-run idempotency check, review of the sync health output, and confirmation that production scheduler settings remain unchanged.
 
 Real external indexing submission remains out of scope unless a separate explicit opt-in flag and production approval are added later.

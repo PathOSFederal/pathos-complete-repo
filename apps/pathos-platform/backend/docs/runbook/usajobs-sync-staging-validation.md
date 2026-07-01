@@ -12,7 +12,7 @@ This runbook validates the bounded Voloro/PathOS USAJOBS sync path before produc
 - Canonical persisted jobs: `saved_search_ingested_jobs`.
 - Sync run health: `job_sync_runs`.
 - Change detection: `job_change_log`.
-- Alert/indexing behavior: staging validation records queued-event counts only; it does not send email and does not call external indexing APIs.
+- Alert/indexing behavior: staging validation records durable queue rows in `job_alert_events` and `job_page_indexing_events`; it does not send email and does not call external indexing APIs.
 
 ## Local Fixture Tests
 
@@ -30,7 +30,7 @@ poetry run ruff check app/services/usajobs_ingestion_service.py app/services/job
 
 ## Dry-Run Staging Sync
 
-Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and suppresses upstream audit writes, ingestion writes, sync run writes, change-log writes, alert/indexing event accounting writes, and cache writes. This read-only behavior applies to successful dry-runs and to upstream error paths.
+Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and suppresses upstream audit writes, ingestion writes, sync run writes, change-log writes, alert/indexing queue writes, and cache writes. This read-only behavior applies to successful dry-runs and to upstream error paths.
 
 Dry-run does not require `PATHOS_ENV` or `--confirm-staging-write`.
 
@@ -74,7 +74,15 @@ This write mode persists:
 - raw upstream snapshot in `upstream_api_audit_records`,
 - canonical rows in `saved_search_ingested_jobs`,
 - run summary in `job_sync_runs`,
-- meaningful changes in `job_change_log`.
+- meaningful changes in `job_change_log`,
+- queue-only alert rows in `job_alert_events`,
+- queue-only indexing rows in `job_page_indexing_events`.
+
+`job_sync_runs.alert_events_queued` and `job_sync_runs.indexing_events_queued` count newly inserted queue rows for that run. Deduped repeat events do not inflate the counters.
+
+Alert event dedupe is saved-search-scoped. If two saved searches match the same USAJOBS job, each saved search can have its own alert row.
+
+Indexing event dedupe is page/job/content-scoped. `saved_search_id` may appear on the first inserted indexing row as provenance, but it is not part of the indexing dedupe identity. If two saved searches match the same USAJOBS job and content, staging should show two alert rows and one indexing row.
 
 It does not mark missing jobs closed because a 1-2 page staging partition is not a complete USAJOBS partition.
 
@@ -86,6 +94,8 @@ Run the same limited write command twice. On the second run:
 - duplicate canonical rows should not appear because `saved_search_ingested_jobs` is unique on `saved_search_id, job_id`.
 - `updated_jobs` should remain `0` unless USAJOBS changed meaningful canonical content.
 - `job_change_log` should not add update rows for only a refreshed source retrieval timestamp.
+- `job_alert_events` and `job_page_indexing_events` should not add duplicate rows for unchanged repeat events.
+- `alert_events_queued` and `indexing_events_queued` should stay `0` on an unchanged repeat run.
 
 ## Health Output
 
@@ -115,7 +125,7 @@ Expected fields:
 Preferred staging reset:
 
 1. Delete the validation saved search created by the script if one was created for the run.
-2. Confirm cascades removed related `saved_search_ingested_jobs` and `job_change_log` rows.
+2. Confirm cascades or reset cleanup removed related `saved_search_ingested_jobs`, `job_change_log`, `job_alert_events`, and `job_page_indexing_events` rows.
 3. If a full staging reset is approved, use the existing wipe/reset process documented in `docs/runbook/backend-runbook-v1.md`.
 
 Do not edit production scheduler settings for this validation pass.

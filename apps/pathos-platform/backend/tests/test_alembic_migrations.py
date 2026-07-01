@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, text
 # WHY: The Alembic upgrade tests should assert against the current head so they
 #      catch missing revisions in CI. Update this value whenever a new revision
 #      becomes the head of the migration chain.
-ALEMBIC_HEAD_REVISION = "20260325_000001"
+ALEMBIC_HEAD_REVISION = "20260326_000001"
 
 
 def _build_alembic_config() -> Config:
