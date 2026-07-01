@@ -128,7 +128,7 @@ Run the same limited write command twice. On the second run:
 
 ## Health Output
 
-Call the staging health endpoint after write mode:
+Call the staging health endpoint after write mode. The endpoint is protected by the same API-key convention as other `/api/v1` operational endpoints:
 
 ```powershell
 Invoke-RestMethod `
@@ -137,7 +137,10 @@ Invoke-RestMethod `
 ```
 
 Expected fields:
+- `status`: one of `never_run`, `healthy`, `stale`, `degraded`, or `failed`
+- `sync_run_status`
 - `last_sync_time`
+- `last_success_time`
 - `records_fetched`
 - `new_jobs`
 - `updated_jobs`
@@ -148,6 +151,18 @@ Expected fields:
 - `indexing_events_queued`
 - `duration_ms`
 - `error_summary`
+- `close_missing_skipped`
+- `close_missing_skip_reason`
+
+`stale` means the latest sync row succeeded but includes stale partition information, such as a close-missing skip caused by incomplete pagination. `degraded` means the latest non-failed sync row recorded failed partitions. `failed` means the latest sync run itself failed. `never_run` means no `job_sync_runs` row exists yet.
+
+The health response is intentionally sanitized. It must not expose USAJOBS API keys, Authorization headers, bearer
+tokens, provider request headers, raw upstream payloads, database connection strings, email addresses, or internal
+stack traces. Authorization-style values using Bearer, Basic, Token, API-key, unknown, quoted, or multi-token forms
+are fully redacted with no trailing credential fragments, and stringified `headers={...}` provider dictionaries are
+replaced with redacted summaries. Malformed failed or stale partition summary JSON returns a safe degraded health
+response instead of raw storage content. Use raw audit tables only through
+approved internal debugging paths, not this operator health endpoint.
 
 ## Rollback Or Reset
 

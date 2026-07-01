@@ -5365,3 +5365,287 @@ artifacts/day-50-usajobs-lifecycle-guards-this-run.patch - 239409 bytes
 ### Final Day 50 Verdict
 - Day 50 lifecycle close-missing guard slice: merge-ready.
 - External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+## 2026-07-01 - Day 51 USAJOBS Sync Ops Health Endpoint
+
+### Summary
+- Added direct tests for `/api/v1/ops/usajobs-sync/health` auth, no-row, healthy, stale, degraded, failed, queue counter, lifecycle visibility, and sanitization behavior.
+- Hardened the health payload returned by `JobSyncRunRepo.latest_health()` with operator-facing status labels and sanitized error/partition summaries.
+- Added a non-technical Day 51 change brief and updated the staging runbook and production-readiness roadmap.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched for Day 51.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 63 passed, 1 skipped in 51.59s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 351 tests in 12.46s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 227234 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | `job_sync_runs` rows -> `JobSyncRunRepo.latest_health()` sanitizes and labels health -> `/api/v1/ops/usajobs-sync/health` returns API-key-protected operator payload |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Ops health could leak secrets/raw provider data/stack traces or mislead operators about failed, stale, degraded, or close-missing-skipped sync state |
+| How tested | Automated endpoint pytest for auth rejection/success, never-run response, healthy response, stale close-missing skip, degraded success with failed partitions, failed response, queue counters, last-success timing, and secret/error sanitization |
+
+### Day 51 Follow-ups
+- Broaden ops health tests later if Day 52 schema/transaction hardening changes sync-run persistence semantics.
+- Keep endpoint payloads summary-only; do not add raw upstream payloads, provider headers, credentials, or stack traces.
+
+### Remaining Day 52+ Blockers
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 51 ops health endpoint slice: implemented and locally validated; ready for code review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 52+ work is complete.
+
+## 2026-07-01 - Day 51 Sanitizer Must-Fix Patch
+
+### Summary
+- Patched the USAJOBS ops health sanitizer so free-text error summaries fully redact Authorization-style credentials using Bearer, Basic, Token, and API-key style schemes.
+- Redacted stringified provider header dictionaries such as `headers={...}` before individual header values can leak.
+- Added safe malformed partition JSON handling so the health endpoint returns a degraded summary instead of a 500 or raw storage content.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched for this patch.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 65 passed, 1 skipped in 57.93s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 353 tests in 9.82s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 238234 bytes
+```
+
+### Must-Fix Resolution
+- Authorization schemes are covered: Bearer, Basic, Token, API-key style schemes, and lowercase `authorization` values are redacted.
+- Stringified provider headers are covered: `headers={...}` expressions are replaced with redacted summaries.
+- API key patterns, database URLs, credential-bearing URLs, emails, raw payload fields, and stack frames remain redacted.
+- Malformed partition JSON handling was fixed in the health endpoint path; malformed partition summaries now produce a safe degraded response with `malformed_failed_partitions_json` or `malformed_stale_partitions_json`.
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | `job_sync_runs.error_summary` and partition JSON -> `JobSyncRunRepo.latest_health()` sanitizer/decoder -> `/api/v1/ops/usajobs-sync/health` returns safe operator payload |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Free-text upstream errors could leak auth tokens/header dictionaries, or malformed partition JSON could break the health endpoint |
+| How tested | Endpoint pytest covers Authorization Basic/Token/Bearer/lowercase auth, stringified provider headers, API keys, credential-bearing URLs, DB URLs, stack frames, and malformed partition JSON |
+
+### Remaining Day 52+ Blockers
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 51 ops health sanitizer must-fix patch: locally validated and ready for final review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 52+ work is complete.
+
+## 2026-07-01 - Day 51 Authorization Trailing-Fragment Must-Fix Patch
+
+### Summary
+- Patched the USAJOBS ops health sanitizer so free-text `Authorization` expressions redact the full value, including unknown, quoted, and multi-token forms.
+- Added endpoint-level regression coverage for trailing Authorization fragments, quoted authorization values, and malformed `stale_partitions_json`.
+- Updated the Day 51 change brief, staging runbook, and production-readiness roadmap to document full Authorization redaction and malformed stale partition handling.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched for this patch.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 66 passed, 1 skipped in 53.61s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 354 tests in 10.10s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 249065 bytes
+```
+
+### Must-Fix Resolution
+- Full Authorization free-text values with trailing fragments are now covered: `Authorization: anything with spaces`, lowercase `authorization: anything with spaces`, `Authorization = anything with spaces`, and quoted authorization values redact to a safe marker without leaking trailing words.
+- Existing Authorization Basic, Token, Bearer, stringified provider headers, API-key patterns, credential-bearing URLs, database URLs, and stack-frame redaction remain covered.
+- Malformed `stale_partitions_json` was fixed and now returns a safe degraded health response with `malformed_stale_partitions_json` instead of crashing or exposing raw storage content.
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | `job_sync_runs.error_summary` and partition JSON -> `JobSyncRunRepo.latest_health()` sanitizer/decoder -> `/api/v1/ops/usajobs-sync/health` returns safe operator payload |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Multi-token Authorization values could leak trailing credential fragments, or malformed stale partition JSON could mislead or break the health endpoint |
+| How tested | Endpoint pytest covers unknown and multi-token Authorization strings, quoted authorization values, Authorization Basic/Token/Bearer, stringified provider headers, API keys, credential-bearing URLs, DB URLs, stack frames, malformed failed partitions, and malformed stale partitions |
+
+### Remaining Day 52+ Blockers
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 51 ops health sanitizer trailing-fragment must-fix patch: locally validated and merge-ready for Day 51 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 52+ work is complete.
+
+## 2026-07-01 - Day 51 Commit And Push Validation
+
+### Summary
+- Re-ran the final Day 51 validation set before committing.
+- Regenerated Day 51 patch artifacts using PowerShell.
+- Confirmed the slice remains scoped to ops health endpoint tests, sanitizer hardening, malformed partition JSON safety, docs, merge notes, and artifacts.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not staged.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 66 passed, 1 skipped in 54.24s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 354 tests in 9.59s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 245548 bytes
+```
+
+### Final Day 51 Verdict
+- Day 51 ops health endpoint hardening: merge-ready for Day 51 only.
+- Sanitizer coverage includes Authorization Basic, Token, Bearer, lowercase, equals-form, quoted, and multi-token unknown values; stringified provider headers; API keys; DB URLs; credential-bearing URLs; stack frames; and raw sensitive detail suppression.
+- Malformed failed and stale partition JSON return safe degraded health output instead of crashing or exposing raw stored JSON.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+### Remaining Day 52+ Blockers
+- Day 52 schema and transaction hardening.
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.

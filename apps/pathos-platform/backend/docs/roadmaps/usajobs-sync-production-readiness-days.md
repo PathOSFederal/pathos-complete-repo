@@ -61,6 +61,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; ops endpoint pytest.
 - Acceptance criteria: endpoint exposes useful health fields without secrets, raw credentials, provider headers, raw payloads, or stack traces.
 - Explicit non-goals: no admin UI build unless separately requested.
+- Day 51 status: implemented in this branch with direct endpoint tests for auth, no-row, healthy, stale close-missing skip, degraded success with failed partitions, failed run, queue counters, last-success timing, and sanitized secret/error output. The must-fix sanitizer patch redacts full Authorization values, including unknown, quoted, and multi-token forms with trailing fragments, plus stringified provider headers, API-key patterns, credential-bearing URLs, database URLs, and stack frames; malformed failed or stale partition JSON degrades safely instead of crashing the health endpoint.
 
 ## Day 52: Schema Integrity And Migration Hardening
 
