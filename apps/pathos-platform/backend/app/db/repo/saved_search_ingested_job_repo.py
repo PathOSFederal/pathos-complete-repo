@@ -10,7 +10,7 @@ from uuid import uuid4
 from app.db.connection import connect, init_db
 
 
-UpsertOutcome = Literal["new", "updated", "unchanged"]
+UpsertOutcome = Literal["new", "updated", "unchanged", "reopened", "expired"]
 
 
 class SavedSearchIngestedJobRepo:
@@ -88,6 +88,15 @@ class SavedSearchIngestedJobRepo:
             if previous_value != next_value:
                 changed.append(field_name)
         return changed
+
+    @staticmethod
+    def _lifecycle_state_for(canonical_job: dict[str, Any], seen_at: str) -> str:
+        """Classify lifecycle from canonical close date without clock-dependent I/O."""
+
+        close_date = canonical_job.get("close_date")
+        if isinstance(close_date, str) and close_date and close_date < seen_at[:10]:
+            return "expired"
+        return "open"
 
     @staticmethod
     def _insert_change_log(
@@ -192,6 +201,10 @@ class SavedSearchIngestedJobRepo:
         stored_job_json = SavedSearchIngestedJobRepo._stored_job_json(canonical_job)
         source_slice_json = json.dumps(source_slice, sort_keys=True, separators=(",", ":"))
         warnings_json = json.dumps(sorted(set(str(item) for item in ingest_warnings)), sort_keys=True)
+        next_lifecycle_state = SavedSearchIngestedJobRepo._lifecycle_state_for(
+            canonical_job,
+            seen_at,
+        )
         init_db()
         with connect() as conn:
             existing = conn.execute(
@@ -247,7 +260,7 @@ class SavedSearchIngestedJobRepo:
                         canonical_job_sha256,
                         stored_job_json,
                         warnings_json,
-                        "open",
+                        next_lifecycle_state,
                         None,
                         seen_at,
                         seen_at,
@@ -274,11 +287,14 @@ class SavedSearchIngestedJobRepo:
 
             previous_hash = str(existing["canonical_job_sha256"])
             unchanged_count = int(existing["unchanged_run_count"])
-            if previous_hash == canonical_job_sha256:
+            previous_lifecycle_state = str(existing["lifecycle_state"])
+            lifecycle_changed = previous_lifecycle_state != next_lifecycle_state
+            if previous_hash == canonical_job_sha256 and not lifecycle_changed:
                 outcome: UpsertOutcome = "unchanged"
                 next_unchanged_count = unchanged_count + 1
                 changed_fields: list[str] = []
                 last_changed_at = None
+                change_type = None
             else:
                 outcome = "updated"
                 next_unchanged_count = 0
@@ -287,7 +303,17 @@ class SavedSearchIngestedJobRepo:
                     previous_job,
                     canonical_job,
                 )
+                if lifecycle_changed and "lifecycle_state" not in changed_fields:
+                    changed_fields.append("lifecycle_state")
                 last_changed_at = seen_at
+                if previous_lifecycle_state == "closed" and next_lifecycle_state == "open":
+                    change_type = "reopened"
+                    outcome = "reopened"
+                elif next_lifecycle_state == "expired":
+                    change_type = "expired"
+                    outcome = "expired"
+                else:
+                    change_type = "updated"
             conn.execute(
                 """
                 UPDATE saved_search_ingested_jobs
@@ -322,7 +348,7 @@ class SavedSearchIngestedJobRepo:
                     canonical_job_sha256,
                     stored_job_json,
                     warnings_json,
-                    "open",
+                    next_lifecycle_state,
                     None,
                     seen_at,
                     seen_at,
@@ -333,13 +359,13 @@ class SavedSearchIngestedJobRepo:
                     job_id,
                 ),
             )
-            if outcome == "updated":
+            if outcome in {"updated", "reopened", "expired"}:
                 SavedSearchIngestedJobRepo._insert_change_log(
                     conn,
                     sync_run_id=sync_run_id,
                     saved_search_id=saved_search_id,
                     job_id=job_id,
-                    change_type="updated",
+                    change_type=str(change_type),
                     changed_fields=changed_fields,
                     previous_hash=previous_hash,
                     new_hash=canonical_job_sha256,

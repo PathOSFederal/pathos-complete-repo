@@ -38,6 +38,8 @@ def _install_successful_sync(monkeypatch) -> dict[str, Any]:
     def fake_ingest_saved_search_results(**kwargs) -> dict[str, Any]:
         observed["ingest_calls"] += 1
         observed["dry_run"] = kwargs["dry_run"]
+        observed["close_missing"] = kwargs["close_missing"]
+        observed["partition_complete"] = kwargs.get("partition_complete")
         return _summary(dry_run=bool(kwargs["dry_run"]))
 
     monkeypatch.setattr(
@@ -216,6 +218,10 @@ def test_staging_cli_write_in_safe_env_with_confirmation_is_allowed(
     assert observed["execute_calls"] == 1
     assert observed["ingest_calls"] == 1
     assert observed["record_upstream_audit"] is True
+    assert observed["close_missing"] is False
+    assert observed["partition_complete"] is None
+    assert output["close_missing"] is False
+    assert output["partition_complete_for_close_missing"] is False
     assert output["runtime_env"] == expected_runtime_env
     assert output["sync_run_ids"] == ["sync-run-1"]
 
@@ -233,6 +239,7 @@ def test_staging_cli_dry_run_with_missing_env_does_not_require_write_confirmatio
     assert observed["execute_calls"] == 1
     assert observed["record_upstream_audit"] is False
     assert observed["dry_run"] is True
+    assert observed["close_missing"] is False
     assert output["sync_run_ids"] == []
 
 

@@ -5225,3 +5225,143 @@ artifacts/day-49-usajobs-canonical-normalization-this-run.patch - 253403 bytes
 ### Final Day 49 Verdict
 - Day 49 canonical normalization slice: merge-ready.
 - External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+## 2026-07-01 - Day 50 USAJOBS Lifecycle Guards
+
+### Branch
+```text
+feature/voloro-day-50-usajobs-lifecycle-guards
+```
+
+### Summary
+- Added a close-missing guard so missing jobs are closed only when close-missing is explicitly enabled and the caller proves partition completeness with a stable partition identity.
+- Partial pagination, dry-run, bounded staging validation, missing partition identity, max-page/max-record truncation, and failed partitions do not close jobs.
+- Added deterministic lifecycle behavior for complete partition closure, reappeared jobs, and expired close dates.
+- Staging CLI output now states that bounded validation runs with `close_missing: false` and `partition_complete_for_close_missing: false`.
+- Day 47 dry-run safety, Day 48 queue-only dedupe, and Day 49 canonical normalization remain in place; no external delivery, scheduler changes, or scraping were added.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-50-usajobs-lifecycle-guards with Day 50 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-50-usajobs-lifecycle-guards
+
+git diff --name-status develop...HEAD
+Result: 53 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, and prior USAJOBS staging-validation lineage; Day 50 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 53 files changed, 111047 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 61 passed, 1 skipped in 56.46s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 345 tests in 11.57s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-50-usajobs-lifecycle-guards.patch - 5126471 bytes
+artifacts/day-50-usajobs-lifecycle-guards-this-run.patch - 242927 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API-shaped payload -> job search execution result -> ingestion lifecycle guard -> persisted canonical row/change log -> Day 48 queue rows when writes are allowed |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | A partial or failed bounded sync could falsely close healthy USAJOBS jobs, or a reappeared/expired job could have an incorrect lifecycle state |
+| How tested | Automated pytest for partial no-close, failed no-close, dry-run no-close, complete close, reappeared reopen, expired close date, staging CLI no-close defaults, queue dedupe compatibility, and migration coverage |
+
+### Remaining Day 51+ Blockers
+- Day 51 ops health tests.
+- Day 52 schema and transaction hardening.
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+
+### Merge Readiness
+- Day 50 lifecycle guard slice: implemented and locally validated; ready for code review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 51+ work is complete.
+
+## 2026-07-01 - Day 50 Final Commit Readiness
+
+### Summary
+- Final pre-commit validation completed for Day 50 USAJOBS lifecycle close-missing guards.
+- Day 50 remains merge-ready for the lifecycle guard slice only.
+- Overall USAJOBS production readiness remains blocked by Day 51+ work.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-50-usajobs-lifecycle-guards with Day 50 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and must not be staged.
+
+git branch --show-current
+Result: feature/voloro-day-50-usajobs-lifecycle-guards
+
+git diff --name-status develop...HEAD
+Result: 53 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, and prior USAJOBS staging-validation lineage; Day 50 working-tree files are captured in the Day 50 artifacts before commit.
+
+git diff --stat develop...HEAD
+Result: 53 files changed, 111047 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/api/jobs/test__positive__normalize.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 68 passed, 1 skipped in 44.48s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 345 tests in 9.43s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-50-usajobs-lifecycle-guards.patch - 5126471 bytes
+artifacts/day-50-usajobs-lifecycle-guards-this-run.patch - 239409 bytes
+```
+
+### Day 50 Follow-ups
+- Add direct tests for `max_pages_reached` and `max_records_reached` close-missing skip reasons.
+- Harden lifecycle date parsing so malformed non-ISO `close_date` values fail open explicitly.
+- Decide expired-new queue semantics before external delivery is enabled.
+- Add repeat-run assertions for complete-close and reappeared-job idempotency.
+- Preserve Day 49 follow-ups: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+
+### Remaining Day 51+ Blockers
+- Ops health tests.
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+
+### Final Day 50 Verdict
+- Day 50 lifecycle close-missing guard slice: merge-ready.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.

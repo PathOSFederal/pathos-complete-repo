@@ -87,6 +87,7 @@ def _indexing_dedupe_key(
     source_job_id: str,
     canonical_job_id: str,
     canonical_hash: str,
+    lifecycle_event: str | None = None,
 ) -> str:
     """Indexing identity is page/job/content scoped, not saved-search scoped."""
 
@@ -97,6 +98,8 @@ def _indexing_dedupe_key(
         "canonical_job_id": canonical_job_id,
         "canonical_hash": canonical_hash,
     }
+    if lifecycle_event is not None:
+        identity["lifecycle_event"] = lifecycle_event
     return _hashed_dedupe_key(identity)
 
 
@@ -111,6 +114,8 @@ class USAJobsIngestionService:
         trigger_mode: str,
         dry_run: bool = False,
         close_missing: bool = False,
+        partition_complete: bool = False,
+        partition_identity: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = time.monotonic()
         started_at = datetime.now(timezone.utc).isoformat()
@@ -140,6 +145,8 @@ class USAJobsIngestionService:
             "stale_partitions": [],
             "alert_events_queued": 0,
             "indexing_events_queued": 0,
+            "close_missing_skipped": False,
+            "close_missing_skip_reason": None,
         }
         seen_job_ids: list[str] = []
         queue_candidates: list[dict[str, Any]] = []
@@ -168,7 +175,7 @@ class USAJobsIngestionService:
                     seen_at=execution.fetched_at,
                     sync_run_id=sync_run_id,
                 )
-                if outcome in {"new", "updated"}:
+                if outcome in {"new", "updated", "reopened", "expired"}:
                     queue_candidates.append(
                         {
                             "source_job_id": normalized.job.source_job_id or normalized.job.id,
@@ -178,15 +185,25 @@ class USAJobsIngestionService:
                             "outcome": outcome,
                         }
                     )
-            summary_key = f"{outcome}_count"
+            summary_outcome = "updated" if outcome in {"reopened", "expired"} else outcome
+            summary_key = f"{summary_outcome}_count"
             summary[summary_key] = int(summary[summary_key]) + 1
             summary["warning_count"] = int(summary["warning_count"]) + len(
                 normalized.warnings
             )
-        if close_missing and not dry_run:
+        close_guard = USAJobsIngestionService._close_missing_guard(
+            close_missing=close_missing,
+            dry_run=dry_run,
+            trigger_mode=trigger_mode,
+            partition_complete=partition_complete,
+            partition_identity=partition_identity,
+            execution=execution,
+        )
+        if close_guard["allowed"]:
             source_slice = dict(execution.query_slice)
             source_slice["trigger_mode"] = trigger_mode
             source_slice["saved_search_id"] = saved_search_id
+            source_slice["partition_identity"] = partition_identity
             closed_jobs = SavedSearchIngestedJobRepo.mark_missing_as_closed_jobs(
                 saved_search_id=saved_search_id,
                 seen_job_ids=seen_job_ids,
@@ -207,6 +224,10 @@ class USAJobsIngestionService:
                         "outcome": "closed",
                     }
                 )
+        elif close_missing:
+            summary["close_missing_skipped"] = True
+            summary["close_missing_skip_reason"] = close_guard["reason"]
+            summary["stale_partitions"].append(close_guard["stale_partition"])
         if not dry_run:
             completed_at = datetime.now(timezone.utc).isoformat()
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -249,6 +270,51 @@ class USAJobsIngestionService:
         return summary
 
     @staticmethod
+    def _close_missing_guard(
+        *,
+        close_missing: bool,
+        dry_run: bool,
+        trigger_mode: str,
+        partition_complete: bool,
+        partition_identity: dict[str, Any] | None,
+        execution: JobSearchExecutionResult,
+    ) -> dict[str, Any]:
+        """Allow close-missing only when the caller proves a complete partition."""
+
+        if not close_missing:
+            return {"allowed": False, "reason": "close_missing_disabled"}
+
+        reason: str | None = None
+        if dry_run:
+            reason = "dry_run"
+        elif trigger_mode == "staging_validation":
+            reason = "staging_bounded_validation"
+        elif not partition_complete:
+            reason = "partition_not_marked_complete"
+        elif not partition_identity:
+            reason = "partition_identity_missing"
+        elif bool(partition_identity.get("max_pages_reached")):
+            reason = "max_pages_reached"
+        elif bool(partition_identity.get("max_records_reached")):
+            reason = "max_records_reached"
+        elif int(execution.response.total) != len(execution.normalized_items):
+            reason = "pagination_incomplete"
+
+        if reason is None:
+            return {"allowed": True, "reason": None}
+
+        return {
+            "allowed": False,
+            "reason": reason,
+            "stale_partition": {
+                "reason": reason,
+                "partition_identity": partition_identity,
+                "records_fetched": len(execution.normalized_items),
+                "upstream_total": int(execution.response.total),
+            },
+        }
+
+    @staticmethod
     def _queue_events(
         *,
         sync_run_id: str,
@@ -268,14 +334,27 @@ class USAJobsIngestionService:
                 alert_event_type = ALERT_JOB_CLOSED
                 indexing_event_type = INDEXING_URL_DELETED
                 reason = "closed_missing_from_complete_partition"
+                dedupe_lifecycle_event = None
+            elif outcome == "reopened":
+                alert_event_type = ALERT_JOB_UPDATED
+                indexing_event_type = INDEXING_URL_UPDATED
+                reason = "reopened_canonical_job"
+                dedupe_lifecycle_event = "reopened"
+            elif outcome == "expired":
+                alert_event_type = ALERT_JOB_UPDATED
+                indexing_event_type = INDEXING_URL_UPDATED
+                reason = "expired_close_date"
+                dedupe_lifecycle_event = "expired"
             elif outcome == "updated":
                 alert_event_type = ALERT_JOB_UPDATED
                 indexing_event_type = INDEXING_URL_UPDATED
                 reason = "meaningful_canonical_update"
+                dedupe_lifecycle_event = None
             else:
                 alert_event_type = ALERT_JOB_NEW
                 indexing_event_type = INDEXING_URL_UPDATED
                 reason = "new_canonical_job"
+                dedupe_lifecycle_event = None
             payload_summary = _safe_job_payload(
                 canonical_job=canonical_job,
                 source_job_id=source_job_id,
@@ -315,6 +394,7 @@ class USAJobsIngestionService:
                     source_job_id=source_job_id,
                     canonical_job_id=str(candidate["canonical_job_id"]),
                     canonical_hash=canonical_hash,
+                    lifecycle_event=dedupe_lifecycle_event,
                 ),
                 created_at=queued_at,
             )

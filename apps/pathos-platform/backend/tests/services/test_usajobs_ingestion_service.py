@@ -43,6 +43,7 @@ def _canonical_job(
     title: str = "Analyst",
     locations: list[str] | None = None,
     retrieved_at: str = "2026-02-20T00:00:00+00:00",
+    close_date: str = "2026-03-15",
 ) -> CanonicalJob:
     return CanonicalJob(
         id=job_id,
@@ -51,7 +52,7 @@ def _canonical_job(
         locations=locations if locations is not None else ["Remote"],
         compensation=CanonicalCompensation(grade_min=11, grade_max=12),
         open_date="2026-02-01",
-        close_date="2026-02-15",
+        close_date=close_date,
         apply_url=f"https://www.usajobs.gov/job/{job_id}/apply",
         source=CanonicalSourceMetadata(
             source="USAJOBS",
@@ -91,6 +92,35 @@ def _execution(job_ids: list[str], *, source_name: str = "USAJOBS_OFFICIAL_API")
             "query_fingerprint": "fp-1",
         },
     )
+
+
+def _execution_with_total(job_ids: list[str], *, total: int) -> JobSearchExecutionResult:
+    execution = _execution(job_ids)
+    return JobSearchExecutionResult(
+        response=JobSearchResponse(
+            results=list(execution.response.results),
+            total=total,
+            page=execution.response.page,
+            page_size=execution.response.page_size,
+            request_id=execution.response.request_id,
+        ),
+        normalized_items=execution.normalized_items,
+        query_fingerprint=execution.query_fingerprint,
+        mapper_version=execution.mapper_version,
+        source_name=execution.source_name,
+        fetched_at=execution.fetched_at,
+        upstream_audit_id=execution.upstream_audit_id,
+        upstream_raw_hash=execution.upstream_raw_hash,
+        query_slice=execution.query_slice,
+    )
+
+
+def _complete_partition_identity(saved_search_id: str) -> dict[str, str]:
+    return {
+        "saved_search_id": saved_search_id,
+        "query_fingerprint": "fp-1",
+        "scope": "complete_saved_search_partition",
+    }
 
 
 def _create_saved_search() -> str:
@@ -480,7 +510,117 @@ def test_usajobs_ingestion_updated_job_queues_url_updated_and_alert(monkeypatch,
     assert json.loads(alert_events[-1]["payload_summary_json"])["title"] == "Senior Analyst"
 
 
-def test_usajobs_ingestion_close_missing_marks_lifecycle_and_queues_events(monkeypatch, tmp_path) -> None:
+def test_usajobs_ingestion_partial_partition_does_not_close_missing_jobs(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_partial_no_close.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution_with_total(["J1"], total=2),
+        trigger_mode="saved_search_runner",
+        close_missing=True,
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
+    missing_job = [row for row in rows if row["job_id"] == "J2"][0]
+
+    assert summary["closed_count"] == 0
+    assert summary["close_missing_skipped"] is True
+    assert summary["close_missing_skip_reason"] == "pagination_incomplete"
+    assert missing_job["lifecycle_state"] == "open"
+    assert "closed" not in [row["change_type"] for row in changes]
+    assert [row["event_type"] for row in USAJobsSyncEventRepo.list_events("indexing")] == [
+        "URL_UPDATED",
+        "URL_UPDATED",
+    ]
+
+
+def test_usajobs_ingestion_close_missing_without_complete_partition_is_skipped(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_unproven_no_close.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="saved_search_runner",
+        close_missing=True,
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    missing_job = [row for row in rows if row["job_id"] == "J2"][0]
+
+    assert summary["closed_count"] == 0
+    assert summary["close_missing_skip_reason"] == "partition_not_marked_complete"
+    assert missing_job["lifecycle_state"] == "open"
+
+
+def test_usajobs_ingestion_failed_partition_does_not_close_existing_jobs(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_failed_no_close.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+
+    USAJobsIngestionService.record_failed_partition(
+        saved_search_id=saved_search_id,
+        trigger_mode="saved_search_runner",
+        partition={"saved_search_id": saved_search_id, "query_fingerprint": "fp-1"},
+        error_summary="JobSearchRateLimitedError",
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
+
+    assert {row["lifecycle_state"] for row in rows} == {"open"}
+    assert "closed" not in [row["change_type"] for row in changes]
+    assert [row["event_type"] for row in USAJobsSyncEventRepo.list_events("indexing")] == [
+        "URL_UPDATED",
+        "URL_UPDATED",
+    ]
+
+
+def test_usajobs_ingestion_dry_run_cannot_close_missing_jobs(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_dry_no_close.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="saved_search_runner",
+        dry_run=True,
+        close_missing=True,
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    missing_job = [row for row in rows if row["job_id"] == "J2"][0]
+
+    assert summary["dry_run"] is True
+    assert summary["closed_count"] == 0
+    assert summary["alert_events_queued"] == 0
+    assert summary["indexing_events_queued"] == 0
+    assert summary["close_missing_skip_reason"] == "dry_run"
+    assert missing_job["lifecycle_state"] == "open"
+
+
+def test_usajobs_ingestion_complete_partition_close_marks_lifecycle_and_queues_events(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_closed.db"))
     saved_search_id = _create_saved_search()
     USAJobsIngestionService.ingest_saved_search_results(
@@ -494,6 +634,8 @@ def test_usajobs_ingestion_close_missing_marks_lifecycle_and_queues_events(monke
         execution=_execution(["J1"]),
         trigger_mode="complete_partition_validation",
         close_missing=True,
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
     )
     rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
     changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
@@ -507,6 +649,80 @@ def test_usajobs_ingestion_close_missing_marks_lifecycle_and_queues_events(monke
     assert [row["change_type"] for row in changes].count("closed") == 1
     assert USAJobsSyncEventRepo.list_events("alert")[-1]["event_type"] == "SAVED_SEARCH_JOB_CLOSED"
     assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_DELETED"
+
+
+def test_usajobs_ingestion_reappeared_closed_job_logs_reopen_and_queues_update(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_reopened.db"))
+    saved_search_id = _create_saved_search()
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="saved_search_runner",
+    )
+    USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1"]),
+        trigger_mode="complete_partition_validation",
+        close_missing=True,
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=_execution(["J1", "J2"]),
+        trigger_mode="complete_partition_validation",
+        partition_complete=True,
+        partition_identity=_complete_partition_identity(saved_search_id),
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+    changes = SavedSearchIngestedJobRepo.list_change_log(saved_search_id)
+    reopened = [row for row in rows if row["job_id"] == "J2"][0]
+
+    assert summary["updated_count"] == 1
+    assert summary["alert_events_queued"] == 1
+    assert summary["indexing_events_queued"] == 1
+    assert reopened["lifecycle_state"] == "open"
+    assert reopened["closed_at"] is None
+    assert "reopened" in [row["change_type"] for row in changes]
+    assert USAJobsSyncEventRepo.list_events("indexing")[-1]["event_type"] == "URL_UPDATED"
+
+
+def test_usajobs_ingestion_past_close_date_marks_job_expired(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "ingestion_expired.db"))
+    saved_search_id = _create_saved_search()
+    expired_job = _canonical_job("J-EXPIRED", close_date="2026-02-15")
+
+    summary = USAJobsIngestionService.ingest_saved_search_results(
+        saved_search_id=saved_search_id,
+        execution=JobSearchExecutionResult(
+            response=JobSearchResponse(
+                results=[expired_job],
+                total=1,
+                page=1,
+                page_size=20,
+                request_id="req-expired",
+            ),
+            normalized_items=(NormalizedUSAJobsItem(job=expired_job, warnings=()),),
+            query_fingerprint="fp-1",
+            mapper_version="usajobs-normalize-v1",
+            source_name="USAJOBS_OFFICIAL_API",
+            fetched_at="2026-02-20T00:00:00+00:00",
+            upstream_audit_id="audit-expired",
+            upstream_raw_hash="raw-expired",
+            query_slice={
+                "page": 1,
+                "page_size": 20,
+                "remote_only": False,
+                "query_fingerprint": "fp-1",
+            },
+        ),
+        trigger_mode="saved_search_runner",
+    )
+    rows = SavedSearchIngestedJobRepo.list_by_saved_search(saved_search_id)
+
+    assert summary["new_count"] == 1
+    assert rows[0]["lifecycle_state"] == "expired"
 
 
 def test_usajobs_ingestion_failed_partition_records_health(monkeypatch, tmp_path) -> None:

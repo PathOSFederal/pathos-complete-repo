@@ -49,6 +49,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; lifecycle-focused pytest; migration tests if schema changes.
 - Acceptance criteria: close-missing requires an explicit complete-partition signal; expired jobs are not exposed as active; limited staging write runs never close missing jobs by default.
 - Explicit non-goals: no scheduler cadence changes.
+- Day 50 status: implemented in this branch with close-missing guarded by explicit partition completeness and partition identity, no-close behavior for dry-run/partial/staging-bounded partitions, deterministic close/reopen/expired lifecycle tests, and staging CLI output that keeps bounded validation no-close by default. Follow-ups preserved for later hardening: add direct `max_pages_reached` and `max_records_reached` close-missing skip tests; harden malformed non-ISO `close_date` parsing so it fails open explicitly; decide expired-new queue semantics before external delivery is enabled; add repeat-run assertions for complete-close and reappeared-job idempotency. Day 51 ops health tests remain separate.
 
 ## Day 51: Health Endpoint And Ops Visibility Tests
 

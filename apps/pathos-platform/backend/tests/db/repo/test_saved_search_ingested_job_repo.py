@@ -33,7 +33,7 @@ def test_saved_search_ingested_job_repo_upsert_is_idempotent(monkeypatch, tmp_pa
             "salary_max": 98000,
         },
         "open_date": "2026-02-01",
-        "close_date": "2026-02-15",
+        "close_date": "2026-03-15",
         "apply_url": "https://www.usajobs.gov/job/1/apply",
         "source": {
             "source": "USAJOBS",
@@ -219,7 +219,7 @@ def test_saved_search_ingested_job_repo_logs_meaningful_canonical_field_changes(
             "salary_max": 95000,
         },
         "open_date": "2026-02-01",
-        "close_date": "2026-02-15",
+        "close_date": "2026-03-15",
         "apply_url": "https://www.usajobs.gov/job/change/apply",
         "source": {
             "source": "USAJOBS",
@@ -238,7 +238,7 @@ def test_saved_search_ingested_job_repo_logs_meaningful_canonical_field_changes(
         "salary_min": 90000,
         "salary_max": 125000,
     }
-    updated_job["close_date"] = "2026-02-28"
+    updated_job["close_date"] = "2026-03-28"
 
     SavedSearchIngestedJobRepo.upsert(
         record_id="ing-change-1",

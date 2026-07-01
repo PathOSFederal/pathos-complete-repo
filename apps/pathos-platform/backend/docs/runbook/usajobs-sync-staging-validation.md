@@ -103,6 +103,18 @@ Indexing event dedupe is page/job/content-scoped. `saved_search_id` may appear o
 
 It does not mark missing jobs closed because a 1-2 page staging partition is not a complete USAJOBS partition.
 
+## Lifecycle And Close-Missing Safety
+
+Close-missing is off by default. A missing job can be marked closed only when the sync call explicitly enables close-missing and proves partition completeness with a stable partition identity. The ingestion guard skips closure for dry-run, bounded staging validation, missing partition identity, partial pagination, max-page or max-record clamps, and failed partitions.
+
+The staging CLI always reports:
+- `close_missing: false`
+- `partition_complete_for_close_missing: false`
+
+That means bounded staging write validation can safely inspect new and updated rows without closing healthy jobs that simply were not included in the small validation slice.
+
+When a complete partition later proves that a previously open job is absent, the sync marks it closed, writes a `closed` change-log row, and queues a deletion/removal indexing event. If that job appears again, the sync reopens it, writes a `reopened` lifecycle change, and queues a URL update. Jobs ingested with close dates already in the past are stored as `expired` rather than open.
+
 ## Repeat-Run Idempotency Check
 
 Run the same limited write command twice. On the second run:

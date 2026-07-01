@@ -100,7 +100,7 @@ def test_positive__normalizes_real_usajobs_shape_to_canonical_fields() -> None:
     assert row.remote_status == "remote"
     assert row.telework_status == "not_eligible"
     assert row.open_date == "2026-06-01"
-    assert row.close_date == "2026-06-15"
+    assert row.close_date == "2027-06-15"
     assert row.apply_url == "https://www.usajobs.gov/job/800000001/apply"
     assert row.source_url == "https://www.usajobs.gov/job/800000001"
     assert row.documents == ["Resume", "SF-50"]

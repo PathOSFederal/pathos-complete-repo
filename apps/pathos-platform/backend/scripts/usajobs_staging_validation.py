@@ -173,6 +173,8 @@ def main() -> int:
     }
     totals["runtime_env"] = runtime_env
     totals["write_confirmed"] = bool(args.confirm_staging_write)
+    totals["close_missing"] = False
+    totals["partition_complete_for_close_missing"] = False
 
     for page in pages:
         search = _search_request(args, page=page)
