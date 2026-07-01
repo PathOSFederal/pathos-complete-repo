@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from typing import Any
 
+from app.core.config import get_runtime_env
 from app.models.job_search import JobSearchRequest
 from app.models.saved_search import SavedSearchCreateRequest
 from app.services.job_search_service import JobSearchService
 from app.services.saved_search_service import SavedSearchService
 from app.services.usajobs_ingestion_service import USAJobsIngestionService
+
+SAFE_WRITE_ENVS = {"local", "dev", "development", "test", "ci", "staging", "qa", "sandbox"}
+PRODUCTION_LIKE_ENVS = {"prod", "production", "main", "live"}
+SAFE_WRITE_ENV_MESSAGE = "local, dev, development, test, ci, staging, qa, sandbox"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,7 +32,75 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-size", type=int, default=25)
     parser.add_argument("--saved-search-id", default="")
     parser.add_argument("--request-id", default="usajobs-staging-validation")
+    parser.add_argument(
+        "--confirm-staging-write",
+        action="store_true",
+        help="Required for --mode write after PATHOS_ENV is verified as non-production.",
+    )
     return parser
+
+
+def _operator_error(message: str, *, mode: str, runtime_env: str) -> None:
+    print(
+        json.dumps(
+            {
+                "blocked": True,
+                "error_summary": message,
+                "mode": mode,
+                "runtime_env": runtime_env,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        file=sys.stderr,
+    )
+
+
+def _explicit_runtime_env_for_write() -> tuple[str | None, str]:
+    raw_value = os.environ.get("PATHOS_ENV")
+    if raw_value is None:
+        return None, "missing"
+    stripped = raw_value.strip()
+    if not stripped:
+        return None, "blank"
+    normalized = stripped.lower()
+    return normalized, normalized
+
+
+def _runtime_env_for_display(args: argparse.Namespace) -> str:
+    if args.mode != "write":
+        return get_runtime_env()
+    _, display_env = _explicit_runtime_env_for_write()
+    return display_env
+
+
+def _validate_write_gate(args: argparse.Namespace) -> str:
+    if args.mode == "dry-run":
+        return get_runtime_env()
+    if not args.confirm_staging_write:
+        raise ValueError(
+            "Write mode blocked: pass --confirm-staging-write only after selecting "
+            "an explicit safe PATHOS_ENV. For staging validation, set "
+            "PATHOS_ENV=staging and rerun with --confirm-staging-write."
+        )
+    runtime_env, display_env = _explicit_runtime_env_for_write()
+    if runtime_env is None:
+        raise ValueError(
+            f"Write mode blocked: PATHOS_ENV is {display_env}. Set PATHOS_ENV=staging "
+            "or another safe non-production value and rerun with --confirm-staging-write."
+        )
+    if runtime_env in PRODUCTION_LIKE_ENVS:
+        raise ValueError(
+            f"Write mode blocked: PATHOS_ENV={runtime_env} is production-like. "
+            "Use dry-run in production-like environments, or set PATHOS_ENV=staging "
+            "for bounded staging write validation."
+        )
+    if runtime_env not in SAFE_WRITE_ENVS:
+        raise ValueError(
+            "Write mode blocked: PATHOS_ENV must be explicitly set to one of "
+            f"{SAFE_WRITE_ENV_MESSAGE} for staging validation."
+        )
+    return runtime_env
 
 
 def _bounded_pages(max_pages: int) -> list[int]:
@@ -75,7 +150,13 @@ def _empty_totals(mode: str) -> dict[str, Any]:
 
 def main() -> int:
     args = _parser().parse_args()
-    pages = _bounded_pages(args.max_pages)
+    runtime_env = _runtime_env_for_display(args)
+    try:
+        runtime_env = _validate_write_gate(args)
+        pages = _bounded_pages(args.max_pages)
+    except ValueError as exc:
+        _operator_error(str(exc), mode=args.mode, runtime_env=runtime_env)
+        return 2
     dry_run = args.mode == "dry-run"
     saved_search_id = "dry-run-preview"
     if not dry_run:
@@ -90,6 +171,8 @@ def main() -> int:
         "pages": pages,
         "page_size": args.page_size,
     }
+    totals["runtime_env"] = runtime_env
+    totals["write_confirmed"] = bool(args.confirm_staging_write)
 
     for page in pages:
         search = _search_request(args, page=page)

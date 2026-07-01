@@ -231,6 +231,40 @@ class JobSearchService:
         )
 
     @staticmethod
+    def _record_upstream_audit_if_enabled(
+        record_upstream_audit: bool,
+        request_id: str,
+        *,
+        endpoint: str,
+        query_hash: str,
+        status_code: int,
+        latency_ms: int,
+        result_count: int,
+        error_class: str | None,
+        upstream_raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, str | None] | None:
+        """Write upstream audit only for mutating search paths.
+
+        Day 47 hardens staging dry-run semantics: when
+        `record_upstream_audit=False`, this service may still call the official
+        USAJOBS API and normalize the response, but it must not initialize the
+        database or write audit/snapshot rows on either success or failure.
+        """
+
+        if not record_upstream_audit:
+            return None
+        return JobSearchService._record_upstream_audit(
+            request_id=request_id,
+            endpoint=endpoint,
+            query_hash=query_hash,
+            status_code=status_code,
+            latency_ms=latency_ms,
+            result_count=result_count,
+            error_class=error_class,
+            upstream_raw_payload=upstream_raw_payload,
+        )
+
+    @staticmethod
     def _response_from_execution(
         execution: JobSearchExecutionResult,
     ) -> JobSearchResponse:
@@ -276,7 +310,8 @@ class JobSearchService:
         cache_key = JobSearchService._cache_key(search)
         ttl_seconds = get_usajobs_cache_ttl_seconds()
         now = time.monotonic()
-        if allow_cache:
+        effective_allow_cache = allow_cache and record_upstream_audit
+        if effective_allow_cache:
             cached = _CACHE.get(cache_key)
             if cached and cached[0] > now:
                 return cached[1]
@@ -306,7 +341,8 @@ class JobSearchService:
                 )
                 upstream_raw_hash = sha256(payload_json.encode("utf-8")).hexdigest()
         except UpstreamRateLimitError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -333,7 +369,8 @@ class JobSearchService:
                 "USAJOBS fetch is disabled because required environment variables are missing."
             ) from exc
         except UpstreamAuthError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -344,7 +381,8 @@ class JobSearchService:
             )
             raise JobSearchUpstreamAuthError("USAJOBS authentication failed") from exc
         except UpstreamUnavailableError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -355,7 +393,8 @@ class JobSearchService:
             )
             raise JobSearchUpstreamUnavailableError("USAJOBS is unavailable") from exc
         except UpstreamResponseError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -417,7 +456,7 @@ class JobSearchService:
                 "query_fingerprint": cache_key,
             },
         )
-        if allow_cache:
+        if effective_allow_cache:
             _CACHE[cache_key] = (now + ttl_seconds, execution)
         return execution
 

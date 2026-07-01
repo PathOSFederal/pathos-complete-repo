@@ -30,12 +30,11 @@ poetry run ruff check app/services/usajobs_ingestion_service.py app/services/job
 
 ## Dry-Run Staging Sync
 
-Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and is intended to suppress both upstream audit writes and ingestion writes.
+Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and suppresses upstream audit writes, ingestion writes, sync run writes, change-log writes, alert/indexing event accounting writes, and cache writes. This read-only behavior applies to successful dry-runs and to upstream error paths.
 
-Known Day 46 checkpoint gap: upstream error paths still need Day 47 hardening so dry-run failures cannot write upstream audit records. Do not treat dry-run as production-ready until that fix is complete.
+Dry-run does not require `PATHOS_ENV` or `--confirm-staging-write`.
 
 ```powershell
-$env:PATHOS_ENV="staging"
 $env:USAJOBS_API_KEY="<staging-usajobs-key>"
 $env:USAJOBS_USER_AGENT="<staging-user-agent>"
 poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
@@ -51,13 +50,24 @@ Expected output:
 
 Use a deliberately small partition: series `2210`, Florida, last 7 days, maximum 1-2 pages.
 
+Write mode is fail-closed. It requires:
+
+- `PATHOS_ENV` set to a safe non-production value such as `staging`, `local`, `dev`, `development`, `test`, `ci`, `qa`, or `sandbox`.
+- the explicit `--confirm-staging-write` flag.
+
+`PATHOS_ENV` must be explicitly present. Missing or blank `PATHOS_ENV` values fail closed instead of inheriting the backend config default of `local`.
+
+Write mode uses this explicit Day 47 allowlist only. Backend config aliases do not expand write permissions, so `stage` is intentionally blocked unless it is later approved as an operational environment name. `staging` is the intended staging value.
+
+`production`, `prod`, `main`, `live`, `stage`, `unknown`, and unapproved environment names are blocked by default. Blocked runs print operator-readable JSON to stderr with remediation such as setting `PATHOS_ENV=staging` and do not create saved searches, sync runs, upstream audit rows, canonical jobs, or change logs.
+
 ```powershell
 $env:PATHOS_ENV="staging"
 $env:ALERTS_DELIVERY_ENABLED="false"
 $env:DRY_RUN_MODE="false"
 $env:USAJOBS_API_KEY="<staging-usajobs-key>"
 $env:USAJOBS_USER_AGENT="<staging-user-agent>"
-poetry run python scripts/usajobs_staging_validation.py --mode write --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+poetry run python scripts/usajobs_staging_validation.py --mode write --confirm-staging-write --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
 ```
 
 This write mode persists:

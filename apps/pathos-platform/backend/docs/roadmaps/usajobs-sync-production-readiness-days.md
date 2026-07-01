@@ -7,12 +7,13 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 
 - Branch: `feature/voloro-day-47-usajobs-sync-safety-gates`
 - Goal: make dry-run non-mutating on success and failure, and prevent accidental write-mode execution outside approved staging/local/test contexts.
-- Issues addressed: dry-run upstream audit writes on exceptions; staging write mode can target any configured database; dry-run preview output is not strong enough for idempotency checks.
+- Issues addressed: dry-run upstream audit writes on exceptions; staging write mode can target any configured database; dry-run cache mutation risk.
 - Files likely touched: `app/services/job_search_service.py`, `app/services/usajobs_ingestion_service.py`, `scripts/usajobs_staging_validation.py`, `tests/services/test_usajobs_ingestion_service.py`, CLI tests if available, runbook and merge notes.
-- Tests to add or update: dry-run upstream-error test proving no upstream audit write; write-mode environment guard tests; dry-run preview output tests.
+- Tests to add or update: dry-run upstream-error tests proving no upstream audit write; write-mode environment guard tests; dry-run cache suppression test.
 - Validation commands: `poetry run ruff check .`; `poetry run mypy app tests`; targeted sync pytest; staging CLI dry-run command against fixtures or mocked client.
-- Acceptance criteria: dry-run creates no durable records in success or exception paths; write mode requires staging/local/test or explicit override; dry-run output separates fetched records from would-create/would-update/would-unchanged results.
+- Acceptance criteria: dry-run creates no durable records in success or exception paths; write mode requires an explicitly set safe environment and `--confirm-staging-write`; missing, blank, production-like, and unknown environments are blocked by default.
 - Explicit non-goals: no production scheduler change; no real email delivery; no external indexing submission.
+- Day 47 status: implemented in this branch, including the missing/blank `PATHOS_ENV` fail-closed patch; Day 48 queue-event persistence and Day 49 canonical normalization remain separate work.
 
 ## Day 48: Real Alert/Indexing Queue Rows With Dedupe
 

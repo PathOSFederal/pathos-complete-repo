@@ -10,7 +10,7 @@ The sync still uses only the official USAJOBS API. No scraping was added.
 
 Federal job data changes frequently. A staging validation pass lets us prove that new jobs, repeated jobs, changed jobs, and closed jobs are handled correctly before the production scheduler depends on the pipeline.
 
-The dry-run mode is intended to let operators fetch and normalize real USAJOBS data without writing staging records. The Day 46 review found one remaining safety gap: upstream error paths can still write audit records, so Day 47 must harden dry-run failure behavior before this is considered production-ready. The limited write mode then tests the real persistence path with a small slice, such as series `2210`, Florida, last 7 days, and 1-2 pages.
+The dry-run mode now lets operators fetch and normalize real USAJOBS data without writing staging records, upstream audit rows, sync runs, change logs, alert/indexing event accounting rows, or cache entries. That read-only behavior covers both successful dry-runs and upstream failures. The limited write mode then tests the real persistence path with a small slice, such as series `2210`, Florida, last 7 days, and 1-2 pages, but only after the operator selects a safe environment and passes `--confirm-staging-write`.
 
 ## How Duplicate, Stale, And Expired Job Risks Are Controlled
 
@@ -24,6 +24,6 @@ Alert and indexing behavior is queue/accounting-only for this staging validation
 
 ## What Remains Before Production
 
-Before production, operators still need dry-run safety hardening, write-mode environment gates, real queue rows with dedupe, canonical USAJOBS field normalization, a final approved staging write run, a repeat-run idempotency check, review of the sync health output, and confirmation that production scheduler settings remain unchanged.
+Before production, operators still need real queue rows with dedupe, canonical USAJOBS field normalization, a final approved staging write run, a repeat-run idempotency check, review of the sync health output, and confirmation that production scheduler settings remain unchanged.
 
 Real external indexing submission remains out of scope unless a separate explicit opt-in flag and production approval are added later.
