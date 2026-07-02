@@ -85,6 +85,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: `poetry run pytest --collect-only -q`; `poetry run pytest --no-cov -vv --durations=20 --maxfail=1 tests`; directory-level pytest splits.
 - Acceptance criteria: timeout point is identified; full suite either completes or has a documented isolated blocker with the next narrow command.
 - Explicit non-goals: no broad refactor of unrelated test suites.
+- Day 53 status: implemented in this branch without changing USAJOBS business logic. The apparent timeout was isolated to cumulative backend runtime plus stale test isolation/contract assumptions, not live USAJOBS traffic or a single hanging sync path. Fixes keep intelligence and worker tests on isolated temporary databases, update the job-search integration contract for Day 49 canonical fields, and refresh the OpenAPI snapshot. Full-suite runtime on this machine is roughly 9-12 minutes depending on coverage mode, so old 244-248 second command timeouts are insufficient for the current backend suite. Day 54 staging execution remains separate.
 
 ## Day 54: Actual Staging Dry-Run, Write, And Repeat-Run Validation
 

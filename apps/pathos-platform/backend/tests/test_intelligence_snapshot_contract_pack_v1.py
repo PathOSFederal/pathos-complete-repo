@@ -15,6 +15,10 @@ def _headers() -> dict[str, str]:
     return {"Authorization": "Bearer k1"}
 
 
+def _set_db_path(monkeypatch, tmp_path, filename: str) -> None:
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / filename))
+
+
 def _career_payload() -> dict:
     return {
         "user_profile": {
@@ -54,8 +58,9 @@ def _job_payload() -> dict:
     }
 
 
-def test_career_readiness_endpoint_contract_and_determinism(monkeypatch) -> None:
+def test_career_readiness_endpoint_contract_and_determinism(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_API_KEYS", "k1")
+    _set_db_path(monkeypatch, tmp_path, "career_readiness.db")
     app = create_app(mode="openapi")
     payload = _career_payload()
 
@@ -82,8 +87,9 @@ def test_career_readiness_endpoint_contract_and_determinism(monkeypatch) -> None
     assert first_model.meta.input_hash == second_model.meta.input_hash
 
 
-def test_resume_readiness_endpoint_contract_and_determinism(monkeypatch) -> None:
+def test_resume_readiness_endpoint_contract_and_determinism(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_API_KEYS", "k1")
+    _set_db_path(monkeypatch, tmp_path, "resume_readiness.db")
     app = create_app(mode="openapi")
     payload = _resume_payload()
 
@@ -110,8 +116,9 @@ def test_resume_readiness_endpoint_contract_and_determinism(monkeypatch) -> None
     assert first_model.meta.input_hash == second_model.meta.input_hash
 
 
-def test_job_match_endpoint_contract_and_determinism(monkeypatch) -> None:
+def test_job_match_endpoint_contract_and_determinism(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_API_KEYS", "k1")
+    _set_db_path(monkeypatch, tmp_path, "job_match.db")
     app = create_app(mode="openapi")
     payload = _job_payload()
 
@@ -138,8 +145,9 @@ def test_job_match_endpoint_contract_and_determinism(monkeypatch) -> None:
     assert first_model.meta.input_hash == second_model.meta.input_hash
 
 
-def test_application_confidence_endpoint_contract_and_determinism(monkeypatch) -> None:
+def test_application_confidence_endpoint_contract_and_determinism(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATHOS_API_KEYS", "k1")
+    _set_db_path(monkeypatch, tmp_path, "application_confidence.db")
     app = create_app(mode="openapi")
 
     with TestClient(app) as client:

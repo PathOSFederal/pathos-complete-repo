@@ -28,6 +28,20 @@ Run lint for the touched sync-validation files:
 poetry run ruff check app/services/usajobs_ingestion_service.py app/services/job_search_service.py app/db/repo/saved_search_ingested_job_repo.py app/db/repo/job_sync_run_repo.py app/api/v1/ops.py scripts/usajobs_staging_validation.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py
 ```
 
+## Backend Pytest Runtime Baseline
+
+Day 53 isolated the prior full-suite timeout. The blocker was not live USAJOBS traffic or a single hanging sync path; it was cumulative backend runtime plus stale test isolation and contract assumptions that have now been corrected.
+
+Before staging validation, use a timeout long enough for the current backend suite. On this workstation, final full-suite validation completed in about 9-12 minutes depending on coverage mode:
+
+```powershell
+poetry run pytest --collect-only -q
+poetry run pytest --no-cov -q --maxfail=1
+poetry run pytest -q --maxfail=1
+```
+
+Short timeouts around four minutes can interrupt a healthy backend run before it reaches later test buckets. If runtime regresses again, split by directory with `--no-cov -vv --durations=20 --maxfail=1` and start with `tests/api`, `tests/services`, `tests/db`, `tests/scripts`, and root-level tests.
+
 ## Dry-Run Staging Sync
 
 Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and suppresses upstream audit writes, ingestion writes, sync run writes, change-log writes, alert/indexing queue writes, and cache writes. This read-only behavior applies to successful dry-runs and to upstream error paths.

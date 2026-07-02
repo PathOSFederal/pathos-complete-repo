@@ -5786,6 +5786,110 @@ artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 276702 bytes
 - Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
 - Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
 
+## 2026-07-01 - Day 53 Backend Pytest Runtime Triage
+
+### Summary
+- Investigated the backend full-suite timeout without changing USAJOBS sync business logic.
+- Isolated the issue to cumulative backend suite runtime plus stale test isolation/contract assumptions, not live USAJOBS calls and not a single hanging sync path.
+- Applied narrow test/runtime fixes: isolated intelligence contract tests to temporary databases, moved the worker scheduler flags test off a fixed stale `/tmp` database, updated the job-search integration contract for Day 49 canonical fields, and refreshed the OpenAPI snapshot.
+- Full-suite commands complete when allowed enough time: final validation took about 9-12 minutes depending on coverage mode on this workstation.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-53-backend-pytest-runtime-triage with Day 53 backend test/docs/artifact changes. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-53-backend-pytest-runtime-triage
+
+git diff --name-status develop...HEAD
+Result: 65 cumulative backend files changed from develop through the committed Day 47-Day 52 lineage. Day 53 working-tree changes are captured in the this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 65 files changed, 942458 insertions(+), 151 deletions(-)
+```
+
+### Collection Baseline
+```text
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 360 tests in 20.60s. Pytest printed the expected collect-only coverage warning because collect-only does not execute tests.
+```
+
+### Directory-Slice Results
+```text
+poetry run pytest tests/api --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 90 passed in 121.45s.
+
+poetry run pytest tests/services --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 48 passed in 43.14s.
+
+poetry run pytest tests/db --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 16 passed, 8 skipped in 18.55s.
+
+poetry run pytest tests/scripts --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 23 passed in 2.49s.
+
+tests/workers
+Result: skipped because the directory does not exist.
+
+poetry run pytest tests/integration --no-cov -vv --durations=20 --maxfail=1
+Initial result: failed on a stale job-search response-shape assertion from before Day 49 canonical fields.
+Final result after narrow test fix: passed, 1 passed in 11.38s.
+
+Additional top-level directories
+Result: adapters 2 passed; boundary 2 passed; contract 3 passed; edge_case 2 passed; integrity 1 passed; misuse_case 2 passed; negative 2 passed; positive 2 passed; use_case 2 passed.
+
+Root-level test files
+Initial result: exposed stale local database assumptions and a stale OpenAPI snapshot.
+Final result after narrow fixes: passed, 154 passed, 2 skipped in 223.98s.
+```
+
+### Narrowed Root Cause
+- The timeout source was not a live USAJOBS or external network call.
+- Coverage was not the cause; the final coverage run completed faster than the final no-coverage run on this machine.
+- The old 244-248 second timeout budget was too short for the current backend suite. `tests/api` alone takes about two minutes, and root-level tests take nearly four minutes.
+- Stale failures that had been hidden behind timeout attempts were fixed in tests only: job-search canonical response shape, isolated test database setup, fixed worker test database path, and the OpenAPI golden artifact.
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -vv --cov=app --cov-fail-under=0 --maxfail=1 --durations=20
+Result: passed, 76 passed, 1 skipped in 110.78s.
+
+poetry run pytest --no-cov -q --maxfail=1
+Result: passed, 350 passed, 10 skipped in 525.81s.
+
+poetry run pytest -q --maxfail=1
+Result: passed, 350 passed, 10 skipped in 697.03s. Coverage total was 91.19%, above the configured 90% threshold.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-53-backend-pytest-runtime-triage.patch, artifacts/day-53-backend-pytest-runtime-triage-this-run.patch | Select-Object Name, Length
+artifacts/day-53-backend-pytest-runtime-triage.patch - 44420412 bytes
+artifacts/day-53-backend-pytest-runtime-triage-this-run.patch - 215736 bytes
+```
+
+### Remaining Day 54+ Blockers
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 53 runtime triage: locally validated and merge-ready for Day 53 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 54+ work is complete.
+
 ### Merge Readiness
 - Day 52 must-fix patch: locally validated and merge-ready for Day 52 only.
 - Overall USAJOBS production readiness remains not merge-ready until Day 53+ work is complete.
