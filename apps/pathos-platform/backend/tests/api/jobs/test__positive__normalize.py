@@ -120,6 +120,48 @@ def test_positive__normalizes_real_usajobs_shape_to_canonical_fields() -> None:
     assert row.source.mapper_version == "usajobs-normalize-v1"
 
 
+def test_positive__normalizes_live_usajobs_who_may_apply_and_hiring_path_shapes() -> None:
+    payload = {
+        "SearchResult": {
+            "SearchResultCountAll": 1,
+            "SearchResultItems": [
+                {
+                    "MatchedObjectId": "900000001",
+                    "MatchedObjectDescriptor": {
+                        "PositionID": "DE-900000001-26",
+                        "PositionTitle": "IT Specialist",
+                        "OrganizationName": "Example Agency",
+                        "PositionLocationDisplay": "Florida",
+                        "PositionLocation": [{"LocationName": "Miami, Florida"}],
+                        "PositionRemuneration": [
+                            {"MinimumRange": "90000", "MaximumRange": "120000"}
+                        ],
+                        "UserArea": {
+                            "Details": {
+                                "LowGrade": "12",
+                                "HighGrade": "13",
+                                "ApplyURI": ["https://www.usajobs.gov/job/900000001/apply"],
+                                "PositionURI": "https://www.usajobs.gov/job/900000001",
+                                "WhoMayApply": {
+                                    "Code": "public",
+                                    "Name": "The public",
+                                },
+                                "HiringPath": ["public", "vet"],
+                            }
+                        },
+                    },
+                }
+            ],
+        }
+    }
+
+    envelope = USAJobsEnvelope.model_validate(payload)
+    row = normalize_search_items(envelope.SearchResult.SearchResultItems)[0]
+
+    assert row.who_may_apply == ["The public"]
+    assert row.hiring_path == ["public", "vet"]
+
+
 def test_positive__normalizes_remote_and_telework_as_separate_fields() -> None:
     rows = {row.id: row for row in _day49_fixture_rows()}
 

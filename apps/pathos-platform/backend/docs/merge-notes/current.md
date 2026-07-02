@@ -5890,9 +5890,360 @@ artifacts/day-53-backend-pytest-runtime-triage-this-run.patch - 215736 bytes
 - Day 53 runtime triage: locally validated and merge-ready for Day 53 only.
 - Overall USAJOBS production readiness remains not merge-ready until Day 54+ work is complete.
 
+## 2026-07-01 - Day 54 USAJOBS Staging Validation Run
+
+### Summary
+- Created branch `feature/voloro-day-54-usajobs-staging-validation-run` from Day 53.
+- Read the runbook and staging CLI safety gates.
+- Confirmed the CLI write gate requires explicit safe `PATHOS_ENV` plus `--confirm-staging-write`, max pages are bounded to 1-2, and staging validation keeps `close_missing` false.
+- Loaded the USAJOBS env file silently; only presence and redacted safety information was logged.
+- Fixed the staging validation script entrypoint so the runbook command imports `app` without requiring pre-set `PYTHONPATH`.
+- Diagnosed the `JobSearchUpstreamSchemaError` with a redacted live-shape probe that printed only keys, types, counts, and validation locations.
+- Fixed the schema issue by accepting official USAJOBS `WhoMayApply` code/name objects and `HiringPath` string lists, then normalizing them to canonical strings.
+- Reran the bounded dry-run against the official USAJOBS API path. It succeeded and previewed 19 jobs.
+- Verified dry-run zero-write by comparing durable app row counts before and after the successful dry-run.
+- Did not run limited write, repeat write, persisted-row verification, or health endpoint verification because the environment did not explicitly prove staging runtime/database targeting.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-54-usajobs-staging-validation-run with unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 dirty/untracked in the wider worktree. Backend Day 54 docs/test/script changes are this branch's working-tree changes.
+
+git branch --show-current
+Result: feature/voloro-day-54-usajobs-staging-validation-run
+
+git diff --name-status develop...HEAD
+Result: 71 cumulative backend files changed from develop through the committed Day 47-Day 53 branch lineage. Day 54 working-tree changes are captured in the this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 71 files changed, 1891444 insertions(+), 160 deletions(-)
+```
+
+### Staging Environment Safety Confirmation
+```text
+Env file: present, loaded without printing contents.
+USAJOBS_API_KEY: present.
+USAJOBS_USER_AGENT: present.
+PATHOS_ENV explicit process value: missing.
+Resolved runtime env: local.
+Database dialect: sqlite.
+Database target: present but redacted.
+Database target production-token check: false.
+Database target explicit staging proof: not proven.
+Required sync tables in target: saved_search_ingested_jobs/job_alert_events/job_page_indexing_events present; job_sync_runs/job_change_log missing.
+PATHOS_API_KEYS: missing.
+Google Indexing credential envs: absent.
+IndexNow credential envs: absent.
+ALERTS_DELIVERY_ENABLED resolved default: true; dry-run command explicitly set it false.
+Write-mode safety verdict: blocked before write because explicit staging runtime/database targeting was not proven.
+```
+
+### Schema Error Root Cause And Fix
+```text
+Root cause: live official USAJOBS Search API records can provide UserArea.Details.WhoMayApply as a Code/Name object and UserArea.Details.HiringPath as a list of strings.
+Previous model expectation: WhoMayApply as string/list of strings and HiringPath as list of Code/Name objects.
+Fix: adapter models now accept those official shapes, and normalization converts them into stable canonical who_may_apply and hiring_path string lists.
+Regression test: added a sanitized live-shaped fixture case covering WhoMayApply Code/Name object and HiringPath string list.
+Raw payloads, headers, API keys, and user-agent values were not logged.
+```
+
+### Dry-Run Result
+```text
+Command shape:
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+
+Result: exit code 0.
+records_fetched: 19
+new_jobs: 19
+updated_jobs: 0
+closed_jobs: 0
+alert_events_queued: 0
+indexing_events_queued: 0
+sync_run_ids: []
+close_missing: false
+partition_complete_for_close_missing: false
+failed_partitions: 0
+error_summary: none
+```
+
+### Dry-Run Zero-Write Verification
+```text
+Counts before dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Counts after dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Result: zero durable app rows changed during the successful dry-run.
+```
+
+### Write, Repeat, Health, And External Delivery Verification
+- First limited write: not run because staging targeting was not proven.
+- Repeat write/idempotency check: not run because the first write was intentionally blocked.
+- Persisted row verification: no new rows existed to verify beyond dry-run zero-write counts.
+- Health endpoint verification: not run because no staging write sync_run was created and `PATHOS_API_KEYS` was not configured.
+- External delivery/indexing verification: no write or worker delivery command was run; queue row counts stayed zero, Google Indexing and IndexNow credential envs were absent, and no scraping was performed.
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py -q --cov=app --cov-fail-under=0
+Result: passed, 8 passed in 7.36s.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 77 passed, 1 skipped in 86.24s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 362 tests in 12.84s. The coverage plugin printed the expected collect-only coverage warning because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-54-usajobs-staging-validation-run.patch, artifacts/day-54-usajobs-staging-validation-run-this-run.patch | Select-Object Name, Length
+artifacts/day-54-usajobs-staging-validation-run.patch - 90021364 bytes
+artifacts/day-54-usajobs-staging-validation-run-this-run.patch - 220218 bytes
+```
+
+### Remaining Day 55+ Blockers
+- Prove explicit staging runtime/database targeting, then rerun bounded write/repeat/health staging validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 54 staging validation run: not merge-ready because write-mode staging targeting was not proven, so limited write, repeat write, persisted-row checks, and health endpoint verification did not run.
+- Overall USAJOBS production readiness remains not merge-ready until write/repeat/health staging validation and Day 55+ work are complete.
+
 ### Merge Readiness
 - Day 52 must-fix patch: locally validated and merge-ready for Day 52 only.
 - Overall USAJOBS production readiness remains not merge-ready until Day 53+ work is complete.
+
+## 2026-07-01 - Day 54 Staging Targeting Continuation
+
+### Summary
+- Continued Day 54 on branch `feature/voloro-day-54-usajobs-staging-validation-run`.
+- Rechecked staging proof with secrets redacted and env file contents omitted.
+- Did not run write mode because the runtime/database target still did not prove staging.
+- Reran the bounded dry-run only. It succeeded and remained zero-write.
+- Limited write, repeat-run idempotency, persisted-row checks, and health endpoint verification remain blocked until explicit staging targeting is configured.
+
+### Git Commands
+```text
+git status --short
+Result: backend Day 54 files remain modified/new; unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree.
+
+git branch --show-current
+Result: feature/voloro-day-54-usajobs-staging-validation-run
+
+git diff --name-status develop...HEAD
+Result: 71 cumulative backend files changed from develop through the committed Day 47-Day 53 branch lineage. Day 54 working-tree changes are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 71 files changed, 1891444 insertions(+), 160 deletions(-)
+```
+
+### Staging Proof Check
+```text
+Env file: present and loaded silently; contents were not printed.
+PATHOS_ENV explicit value: missing.
+Resolved runtime env: local.
+Runtime defaulted to local: true.
+Database dialect: sqlite.
+Database target: present but redacted.
+Database target production-token check: false.
+Database target staging proof: not proven.
+Required tables present: saved_search_ingested_jobs/job_alert_events/job_page_indexing_events.
+Required tables missing in target: job_sync_runs/job_change_log.
+PATHOS_API_KEYS: missing.
+USAJOBS credentials: present.
+Email delivery flag: safe/disabled.
+Google Indexing env flags: absent.
+IndexNow env flags: absent.
+Bounded partition: series 2210, Florida, last 7 days, max pages 1, page size 25.
+Write-mode Day 54 contract: not satisfied.
+Write command executed: no.
+```
+
+### Dry-Run Result
+```text
+Command shape:
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+
+Result: exit code 0.
+records_fetched: 19
+new_jobs: 19
+updated_jobs: 0
+closed_jobs: 0
+failed_partitions: 0
+sync_run_ids: []
+alert_events_queued: 0
+indexing_events_queued: 0
+close_missing: false
+partition_complete_for_close_missing: false
+runtime_env: local
+```
+
+### Dry-Run Zero-Write Verification
+```text
+Counts before dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_source_snapshots: missing_table
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Counts after dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_source_snapshots: missing_table
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Result: zero durable app rows changed during dry-run.
+```
+
+### Write, Repeat, Health, And External Delivery
+- First limited write: not run because staging targeting was not proven.
+- Repeat write/idempotency check: not run because write mode was intentionally blocked.
+- Persisted row verification: not run beyond dry-run zero-write checks because no write rows were created.
+- Health endpoint verification: not run because no staging sync run was created and ops API keys were not configured.
+- External delivery/indexing verification: no write, worker delivery, email delivery, Google Indexing submission, IndexNow submission, scheduler change, or scraping occurred.
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 85 passed, 1 skipped in 66.91s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 362 tests in 10.47s. The coverage plugin printed the expected collect-only coverage warning because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-54-usajobs-staging-validation-run.patch, artifacts/day-54-usajobs-staging-validation-run-this-run.patch | Select-Object Name, Length
+artifacts/day-54-usajobs-staging-validation-run.patch - 91419940 bytes
+artifacts/day-54-usajobs-staging-validation-run-this-run.patch - 236286 bytes
+```
+
+### Remaining Day 55+ Blockers
+- Configure and prove explicit staging runtime/database targeting, then rerun bounded write/repeat/health validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 54 continuation: not merge-ready because staging write/repeat/health validation remains blocked by missing staging proof.
+- Overall USAJOBS production readiness remains not merge-ready until staging write/repeat/health validation and Day 55+ work are complete.
+
+## 2026-07-02 - Day 54 Blocked Checkpoint Commit Validation
+
+### Summary
+- Prepared a Day 54 checkpoint commit for `feature/voloro-day-54-usajobs-staging-validation-run`.
+- This checkpoint is explicitly not merge-ready.
+- Safe progress preserved: live official USAJOBS schema drift was fixed, bounded dry-run succeeds, and dry-run zero-write was verified.
+- Write/repeat/health validation still did not run because staging runtime/database targeting was not proven.
+- No production write, email delivery, Google Indexing API submission, IndexNow submission, scheduler change, scraping, or worker delivery activation occurred.
+
+### Latest Validation Results
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 85 passed, 1 skipped in 71.22s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 362 tests in 15.16s. The coverage plugin printed the expected collect-only coverage warning because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Dry-Run And Zero-Write Status
+```text
+Latest bounded dry-run command shape:
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+
+Latest dry-run result:
+records_fetched: 19
+new_jobs: 19
+updated_jobs: 0
+closed_jobs: 0
+failed_partitions: 0
+sync_run_ids: []
+alert_events_queued: 0
+indexing_events_queued: 0
+close_missing: false
+
+Zero-write verification:
+Durable app row counts were unchanged before and after dry-run. No sync-run rows, canonical rows, change-log rows, alert queue rows, indexing queue rows, source snapshots, or upstream audit rows were created by dry-run.
+```
+
+### Explicit Blocker
+- Day 54 is not merge-ready.
+- Staging runtime/database targeting is not proven.
+- Limited write, repeat-run idempotency, persisted-row verification, and ops health endpoint verification did not run.
+
+### Required Staging Configuration Before Continuing Day 54
+- Set explicit `PATHOS_ENV=staging`.
+- Configure a proven non-production staging database target, not sqlite/local.
+- Apply the Day 52 schema/migrations in staging so `job_sync_runs`, `job_change_log`, `saved_search_ingested_jobs`, `job_alert_events`, and `job_page_indexing_events` exist.
+- Configure `PATHOS_API_KEYS` or the repo-equivalent ops API auth for health endpoint verification.
+- Provide USAJOBS credentials without logging their values.
+- Keep email delivery disabled.
+- Keep Google Indexing submission disabled.
+- Keep IndexNow submission disabled.
+- Keep `close_missing=false` for bounded staging validation.
+- Use the bounded partition only: series 2210, Florida, last 7 days, max pages 1, page size 25.
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-54-usajobs-staging-validation-run.patch, artifacts/day-54-usajobs-staging-validation-run-this-run.patch | Select-Object Name, Length
+artifacts/day-54-usajobs-staging-validation-run.patch - 91419940 bytes
+artifacts/day-54-usajobs-staging-validation-run-this-run.patch - 232307 bytes
+```
+
+### Merge Readiness
+- Day 54 checkpoint commit: safe to commit and push as a blocked checkpoint only.
+- Day 54 merge readiness: not merge-ready until real staging write/repeat/health validation is completed against a proven staging target.
 
 ## 2026-07-01 - Day 52 Commit Validation
 

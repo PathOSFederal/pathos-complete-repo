@@ -56,8 +56,8 @@ class USAJobsDetails(BaseModel):
     QualificationsRequired: str | list[str] | None = None
     QualificationSummary: str | list[str] | None = None
     Requirements: str | list[str] | None = None
-    WhoMayApply: str | list[str] | None = None
-    HiringPath: list[USAJobsCodeName] | None = None
+    WhoMayApply: str | list[str] | USAJobsCodeName | None = None
+    HiringPath: list[USAJobsCodeName | str] | None = None
 
 
 class USAJobsUserArea(BaseModel):

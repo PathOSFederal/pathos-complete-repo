@@ -102,15 +102,22 @@ def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", without_tags).strip()
 
 
-def _text_list(value: str | list[str] | None) -> list[str]:
+def _text_list(value: str | list[str] | USAJobsCodeName | None) -> list[str]:
     """Return deterministic non-empty text fragments from USAJOBS string/list fields."""
 
     if value is None:
         return []
-    raw_values = value if isinstance(value, list) else [value]
+    raw_values: list[str | USAJobsCodeName] = []
+    if isinstance(value, list):
+        raw_values.extend(value)
+    else:
+        raw_values.append(value)
     cleaned: list[str] = []
     for item in raw_values:
-        text = str(item)
+        if isinstance(item, USAJobsCodeName):
+            text = item.Name or item.Code or ""
+        else:
+            text = str(item)
         list_items = re.findall(
             r"<li[^>]*>(.*?)</li>",
             text,
@@ -135,14 +142,17 @@ def _code_values(values: list[USAJobsCodeName] | None) -> list[str]:
     return sorted(set(codes))
 
 
-def _name_values(values: list[USAJobsCodeName] | None) -> list[str]:
+def _name_values(values: list[USAJobsCodeName | str] | None) -> list[str]:
     """Extract stable display names from USAJOBS code/name arrays."""
 
     if values is None:
         return []
     names: list[str] = []
     for item in values:
-        if item.Name and item.Name.strip():
+        if isinstance(item, str):
+            if item.strip():
+                names.append(item.strip())
+        elif item.Name and item.Name.strip():
             names.append(item.Name.strip())
     return sorted(set(names))
 

@@ -60,6 +60,8 @@ Expected output:
 - `alert_events_queued` is `0`.
 - `indexing_events_queued` is `0`.
 
+Day 54 execution note: the first bounded dry-run reached the official USAJOBS path but failed safely with `JobSearchUpstreamSchemaError` because live `WhoMayApply` and `HiringPath` field shapes differed from the fixture. The adapter now accepts those official shapes, and the bounded dry-run succeeds with zero durable writes. The continuation pass still did not prove staging targeting: `PATHOS_ENV` was not explicitly set to `staging`, runtime resolved to `local`, the target was sqlite rather than a proven staging database, required sync tables were missing in that target, and ops API keys were not configured. Do not run bounded write validation until the runtime/database target is explicitly proven to be staging.
+
 ## Canonical Normalization Checks
 
 Day 49 hardens the production normalizer so staging validation inspects real canonical fields from official USAJOBS Search API payloads rather than ad hoc test-only fields. Canonical rows should include:

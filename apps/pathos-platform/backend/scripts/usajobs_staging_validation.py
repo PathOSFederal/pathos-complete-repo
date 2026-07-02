@@ -6,14 +6,19 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
-from app.core.config import get_runtime_env
-from app.models.job_search import JobSearchRequest
-from app.models.saved_search import SavedSearchCreateRequest
-from app.services.job_search_service import JobSearchService
-from app.services.saved_search_service import SavedSearchService
-from app.services.usajobs_ingestion_service import USAJobsIngestionService
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.core.config import get_runtime_env  # noqa: E402
+from app.models.job_search import JobSearchRequest  # noqa: E402
+from app.models.saved_search import SavedSearchCreateRequest  # noqa: E402
+from app.services.job_search_service import JobSearchService  # noqa: E402
+from app.services.saved_search_service import SavedSearchService  # noqa: E402
+from app.services.usajobs_ingestion_service import USAJobsIngestionService  # noqa: E402
 
 SAFE_WRITE_ENVS = {"local", "dev", "development", "test", "ci", "staging", "qa", "sandbox"}
 PRODUCTION_LIKE_ENVS = {"prod", "production", "main", "live"}

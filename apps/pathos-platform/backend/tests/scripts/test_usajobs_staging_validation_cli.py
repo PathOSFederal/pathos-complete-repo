@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 import scripts.usajobs_staging_validation as staging_cli
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _summary(*, dry_run: bool) -> dict[str, Any]:
@@ -69,6 +74,37 @@ def test_staging_cli_write_without_confirmation_is_blocked(
     assert result == 2
     assert error["blocked"] is True
     assert "confirm-staging-write" in error["error_summary"]
+
+
+def test_staging_cli_script_entrypoint_imports_app_without_pythonpath() -> None:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PATHOS_ENV", None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/usajobs_staging_validation.py",
+            "--mode",
+            "write",
+            "--saved-search-id",
+            "saved-1",
+            "--confirm-staging-write",
+        ],
+        cwd=BACKEND_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    error = json.loads(result.stderr)
+
+    assert result.returncode == 2
+    assert "ModuleNotFoundError" not in result.stderr
+    assert error["runtime_env"] == "missing"
+    assert "PATHOS_ENV is missing" in error["error_summary"]
 
 
 def test_staging_cli_write_with_missing_env_is_blocked(monkeypatch, capsys) -> None:

@@ -97,6 +97,7 @@ The branch remains not merge-ready until the safety, queue, canonical-field, lif
 - Validation commands: local fixture tests; staging dry-run command; limited staging write command; repeat-run idempotency command; health endpoint check.
 - Acceptance criteria: dry-run has zero durable writes; bounded write persists expected rows; repeat run is idempotent; health output matches expected counts; no real email or external indexing occurs.
 - Explicit non-goals: no production rollout.
+- Day 54 status: continued in this branch and still safely blocked before write. The runbook-style script invocation was hardened so `python scripts/usajobs_staging_validation.py` imports app modules without requiring pre-set `PYTHONPATH`. The dry-run schema issue was traced to live official USAJOBS fields where `WhoMayApply` is a code/name object and `HiringPath` is a string list; the adapter now accepts and normalizes those shapes. The bounded dry-run now succeeds and previews 19 jobs with zero durable writes. The continuation proof check still resolved to local/sqlite with missing `PATHOS_ENV=staging`, missing required sync tables in that target, and missing ops API keys. Limited write, repeat write, and health endpoint verification were not run because the environment still does not explicitly prove staging runtime/database targeting.
 
 ## Day 55: Public Job Page Sync Contract Alignment
 
