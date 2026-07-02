@@ -153,12 +153,12 @@ def test_worker_run_once_pauses_when_worker_disabled(monkeypatch) -> None:
     assert called["count"] == 0
 
 
-def test_worker_run_once_forwards_dry_run_and_delivery_flags(monkeypatch) -> None:
+def test_worker_run_once_forwards_dry_run_and_delivery_flags(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("WORKER_ENABLED", "true")
     monkeypatch.setenv("ALERTS_EVALUATION_ENABLED", "true")
     monkeypatch.setenv("DRY_RUN_MODE", "true")
     monkeypatch.setenv("ALERTS_DELIVERY_ENABLED", "false")
-    monkeypatch.setenv("PATHOS_DB_PATH", "/tmp/pathos_worker_flags.db")
+    monkeypatch.setenv("PATHOS_DB_PATH", str(tmp_path / "pathos_worker_flags.db"))
 
     captured: dict[str, object] = {}
 

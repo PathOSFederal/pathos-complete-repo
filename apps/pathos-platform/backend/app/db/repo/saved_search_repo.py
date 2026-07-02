@@ -159,6 +159,22 @@ class SavedSearchRepo:
                 "DELETE FROM alert_rules WHERE saved_search_id = ?", (saved_search_id,)
             )
             conn.execute(
+                "DELETE FROM saved_search_ingested_jobs WHERE saved_search_id = ?",
+                (saved_search_id,),
+            )
+            conn.execute(
+                "DELETE FROM job_page_indexing_events WHERE saved_search_id = ?",
+                (saved_search_id,),
+            )
+            conn.execute(
+                "DELETE FROM job_alert_events WHERE saved_search_id = ?",
+                (saved_search_id,),
+            )
+            conn.execute(
+                "DELETE FROM job_change_log WHERE saved_search_id = ?",
+                (saved_search_id,),
+            )
+            conn.execute(
                 "DELETE FROM saved_search_runs WHERE saved_search_id = ?",
                 (saved_search_id,),
             )

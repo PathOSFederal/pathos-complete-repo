@@ -1,0 +1,197 @@
+# USAJOBS Sync Staging Validation Runbook
+
+This runbook validates the bounded Voloro/PathOS USAJOBS sync path before production. The sync uses only the official USAJOBS API through `app/adapters/usajobs/client.py`; scraping is not allowed.
+
+## What This Validates
+
+- Worker entrypoint: `app/worker/__init__.py` runs alert scheduler ticks.
+- Scheduler assumptions: the worker delegates to `SchedulerEngine`, which calls `AlertsRunService.run_enabled_rules`.
+- USAJOBS integration path: `USAJobsClient.search_jobs` -> `JobSearchService.execute_search`.
+- Canonical job model: `app/domain/jobs/canonical_models.py`.
+- Raw source snapshots: `upstream_api_audit_records.payload_json` and `response_sha256`.
+- Canonical persisted jobs: `saved_search_ingested_jobs`.
+- Sync run health: `job_sync_runs`.
+- Change detection: `job_change_log`.
+- Alert/indexing behavior: staging validation records durable queue rows in `job_alert_events` and `job_page_indexing_events`; it does not send email and does not call external indexing APIs.
+
+## Local Fixture Tests
+
+Run deterministic tests without live USAJOBS calls:
+
+```powershell
+poetry run pytest -q tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py --cov=app --cov-fail-under=0
+```
+
+Run lint for the touched sync-validation files:
+
+```powershell
+poetry run ruff check app/services/usajobs_ingestion_service.py app/services/job_search_service.py app/db/repo/saved_search_ingested_job_repo.py app/db/repo/job_sync_run_repo.py app/api/v1/ops.py scripts/usajobs_staging_validation.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py
+```
+
+## Backend Pytest Runtime Baseline
+
+Day 53 isolated the prior full-suite timeout. The blocker was not live USAJOBS traffic or a single hanging sync path; it was cumulative backend runtime plus stale test isolation and contract assumptions that have now been corrected.
+
+Before staging validation, use a timeout long enough for the current backend suite. On this workstation, final full-suite validation completed in about 9-12 minutes depending on coverage mode:
+
+```powershell
+poetry run pytest --collect-only -q
+poetry run pytest --no-cov -q --maxfail=1
+poetry run pytest -q --maxfail=1
+```
+
+Short timeouts around four minutes can interrupt a healthy backend run before it reaches later test buckets. If runtime regresses again, split by directory with `--no-cov -vv --durations=20 --maxfail=1` and start with `tests/api`, `tests/services`, `tests/db`, `tests/scripts`, and root-level tests.
+
+## Dry-Run Staging Sync
+
+Dry-run fetches and normalizes official USAJOBS data, computes the same staging summary shape, and suppresses upstream audit writes, ingestion writes, sync run writes, change-log writes, alert/indexing queue writes, and cache writes. This read-only behavior applies to successful dry-runs and to upstream error paths.
+
+Dry-run does not require `PATHOS_ENV` or `--confirm-staging-write`.
+
+```powershell
+$env:USAJOBS_API_KEY="<staging-usajobs-key>"
+$env:USAJOBS_USER_AGENT="<staging-user-agent>"
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+```
+
+Expected output:
+- `records_fetched` is the number of normalized USAJOBS records returned.
+- `sync_run_ids` is empty.
+- `alert_events_queued` is `0`.
+- `indexing_events_queued` is `0`.
+
+Day 54 execution note: the first bounded dry-run reached the official USAJOBS path but failed safely with `JobSearchUpstreamSchemaError` because live `WhoMayApply` and `HiringPath` field shapes differed from the fixture. The adapter now accepts those official shapes, and the bounded dry-run succeeds with zero durable writes. The continuation pass still did not prove staging targeting: `PATHOS_ENV` was not explicitly set to `staging`, runtime resolved to `local`, the target was sqlite rather than a proven staging database, required sync tables were missing in that target, and ops API keys were not configured. Do not run bounded write validation until the runtime/database target is explicitly proven to be staging.
+
+## Canonical Normalization Checks
+
+Day 49 hardens the production normalizer so staging validation inspects real canonical fields from official USAJOBS Search API payloads rather than ad hoc test-only fields. Canonical rows should include:
+
+- source job id and announcement number,
+- title, agency, department, series, grade/pay plan, and salary range,
+- normalized locations,
+- separate `remote_status` and `telework_status`,
+- open and close dates,
+- official USAJOBS apply URL and source announcement URL,
+- documents, qualifications, duties, who-may-apply, and hiring path when USAJOBS provides them,
+- lifecycle status and stable content hash.
+
+Telework eligibility must not be treated as fully remote. `location negotiable after selection` must not be treated as fully remote either; it remains a separate normalized remote status.
+
+The canonical content hash is derived from normalized canonical job content with observation-only source fields, such as `source.retrieved_at`, excluded. It is expected to change when meaningful fields such as title, agency, locations, remote/telework status, salary, dates, documents, qualifications, duties, or official URLs change. It should not change because of JSON key ordering, fetch timestamp, sync run id, or ignored upstream metadata.
+
+## Limited Staging Write Sync
+
+Use a deliberately small partition: series `2210`, Florida, last 7 days, maximum 1-2 pages.
+
+Write mode is fail-closed. It requires:
+
+- `PATHOS_ENV` set to a safe non-production value such as `staging`, `local`, `dev`, `development`, `test`, `ci`, `qa`, or `sandbox`.
+- the explicit `--confirm-staging-write` flag.
+
+`PATHOS_ENV` must be explicitly present. Missing or blank `PATHOS_ENV` values fail closed instead of inheriting the backend config default of `local`.
+
+Write mode uses this explicit Day 47 allowlist only. Backend config aliases do not expand write permissions, so `stage` is intentionally blocked unless it is later approved as an operational environment name. `staging` is the intended staging value.
+
+`production`, `prod`, `main`, `live`, `stage`, `unknown`, and unapproved environment names are blocked by default. Blocked runs print operator-readable JSON to stderr with remediation such as setting `PATHOS_ENV=staging` and do not create saved searches, sync runs, upstream audit rows, canonical jobs, or change logs.
+
+```powershell
+$env:PATHOS_ENV="staging"
+$env:ALERTS_DELIVERY_ENABLED="false"
+$env:DRY_RUN_MODE="false"
+$env:USAJOBS_API_KEY="<staging-usajobs-key>"
+$env:USAJOBS_USER_AGENT="<staging-user-agent>"
+poetry run python scripts/usajobs_staging_validation.py --mode write --confirm-staging-write --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+```
+
+This write mode persists:
+- raw upstream snapshot in `upstream_api_audit_records`,
+- canonical rows in `saved_search_ingested_jobs`,
+- run summary in `job_sync_runs`,
+- meaningful changes in `job_change_log`,
+- queue-only alert rows in `job_alert_events`,
+- queue-only indexing rows in `job_page_indexing_events`.
+
+`job_sync_runs.alert_events_queued` and `job_sync_runs.indexing_events_queued` count newly inserted queue rows for that run. Deduped repeat events do not inflate the counters.
+
+Alert event dedupe is saved-search-scoped. If two saved searches match the same USAJOBS job, each saved search can have its own alert row.
+
+Indexing event dedupe is page/job/content-scoped. `saved_search_id` may appear on the first inserted indexing row as provenance, but it is not part of the indexing dedupe identity. If two saved searches match the same USAJOBS job and content, staging should show two alert rows and one indexing row.
+
+Day 52 hardens the write transaction boundary. Canonical job upserts, lifecycle transitions, `job_change_log` rows, sync-run creation, queue row insertion, and queue counter updates now commit together for the non-dry-run write phase. `job_sync_runs` counters should agree with the actual newly inserted rows in `job_alert_events` and `job_page_indexing_events`, and queue dedupe remains enforced by database-level `dedupe_key` uniqueness. If queue insertion or counter update fails before commit, canonical rows, change logs, lifecycle changes, the sync-run row, and queue rows roll back together. A retry can then insert the canonical job and expected queue events normally instead of seeing a half-written job as unchanged.
+
+Day 52 also adds operational indexes for change-log sync run lookup, change type lookup, ingested job lifecycle lookup, ingested job id lookup, and sync-run status/source status lookup. Deeper table-rebuild constraints such as adding a retroactive `job_change_log.sync_run_id` foreign key are intentionally deferred until a later schema rebuild can be reviewed separately.
+
+It does not mark missing jobs closed because a 1-2 page staging partition is not a complete USAJOBS partition.
+
+## Lifecycle And Close-Missing Safety
+
+Close-missing is off by default. A missing job can be marked closed only when the sync call explicitly enables close-missing and proves partition completeness with a stable partition identity. The ingestion guard skips closure for dry-run, bounded staging validation, missing partition identity, partial pagination, max-page or max-record clamps, and failed partitions.
+
+The staging CLI always reports:
+- `close_missing: false`
+- `partition_complete_for_close_missing: false`
+
+That means bounded staging write validation can safely inspect new and updated rows without closing healthy jobs that simply were not included in the small validation slice.
+
+When a complete partition later proves that a previously open job is absent, the sync marks it closed, writes a `closed` change-log row, and queues a deletion/removal indexing event. If that job appears again, the sync reopens it, writes a `reopened` lifecycle change, and queues a URL update. Jobs ingested with close dates already in the past are stored as `expired` rather than open.
+
+## Repeat-Run Idempotency Check
+
+Run the same limited write command twice. On the second run:
+
+- `unchanged_jobs` should increase for jobs already seen.
+- duplicate canonical rows should not appear because `saved_search_ingested_jobs` is unique on `saved_search_id, job_id`.
+- `updated_jobs` should remain `0` unless USAJOBS changed meaningful canonical content.
+- `job_change_log` should not add update rows for only a refreshed source retrieval timestamp.
+- `job_alert_events` and `job_page_indexing_events` should not add duplicate rows for unchanged repeat events.
+- `alert_events_queued` and `indexing_events_queued` should stay `0` on an unchanged repeat run.
+
+## Health Output
+
+Call the staging health endpoint after write mode. The endpoint is protected by the same API-key convention as other `/api/v1` operational endpoints:
+
+```powershell
+Invoke-RestMethod `
+  -Headers @{ Authorization = "Bearer <staging-api-key>" } `
+  https://<staging-host>/api/v1/ops/usajobs-sync/health
+```
+
+Expected fields:
+- `status`: one of `never_run`, `healthy`, `stale`, `degraded`, or `failed`
+- `sync_run_status`
+- `last_sync_time`
+- `last_success_time`
+- `records_fetched`
+- `new_jobs`
+- `updated_jobs`
+- `closed_jobs`
+- `failed_partitions`
+- `stale_partitions`
+- `alert_events_queued`
+- `indexing_events_queued`
+- `duration_ms`
+- `error_summary`
+- `close_missing_skipped`
+- `close_missing_skip_reason`
+
+`stale` means the latest sync row succeeded but includes stale partition information, such as a close-missing skip caused by incomplete pagination. `degraded` means the latest non-failed sync row recorded failed partitions. `failed` means the latest sync run itself failed. `never_run` means no `job_sync_runs` row exists yet.
+
+The health response is intentionally sanitized. It must not expose USAJOBS API keys, Authorization headers, bearer
+tokens, provider request headers, raw upstream payloads, database connection strings, email addresses, or internal
+stack traces. Authorization-style values using Bearer, Basic, Token, API-key, unknown, quoted, or multi-token forms
+are fully redacted with no trailing credential fragments, and stringified `headers={...}` provider dictionaries are
+replaced with redacted summaries. Malformed failed or stale partition summary JSON returns a safe degraded health
+response instead of raw storage content. Use raw audit tables only through
+approved internal debugging paths, not this operator health endpoint.
+
+## Rollback Or Reset
+
+Preferred staging reset:
+
+1. Delete the validation saved search created by the script if one was created for the run.
+2. Confirm cascades or reset cleanup removed related `saved_search_ingested_jobs`, `job_change_log`, `job_alert_events`, and `job_page_indexing_events` rows.
+3. If a full staging reset is approved, use the existing wipe/reset process documented in `docs/runbook/backend-runbook-v1.md`.
+
+Do not edit production scheduler settings for this validation pass.
+Do not enable real email delivery.
+Do not enable external indexing submissions.

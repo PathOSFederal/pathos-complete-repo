@@ -7,6 +7,21 @@ from app.db.repo.audit_repo import AuditRepo
 from app.db.repo.thread_repo import ThreadRepo
 
 
+def _index_columns(conn, index_name: str) -> list[str]:
+    rows = conn.execute(f"PRAGMA index_info({index_name})").fetchall()
+    return [row[2] for row in rows]
+
+
+def _has_unique_index(conn, table_name: str, columns: list[str]) -> bool:
+    indexes = conn.execute(f"PRAGMA index_list({table_name})").fetchall()
+    for index_row in indexes:
+        index_name = index_row[1]
+        is_unique = bool(index_row[2])
+        if is_unique and _index_columns(conn, index_name) == columns:
+            return True
+    return False
+
+
 def test_migration_runner_applies_and_is_idempotent(tmp_path) -> None:
     db_path = tmp_path / "migrations_test.db"
     migration_files = sorted(path.name for path in MIGRATIONS_DIR.glob("*.sql"))
@@ -31,6 +46,55 @@ def test_migration_runner_applies_and_is_idempotent(tmp_path) -> None:
         assert "idx_audit_records_created_at" in index_names
         assert "idx_threads_updated_at" in index_names
         assert "idx_thread_messages_thread_created_at" in index_names
+
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        table_names = {row[0] for row in tables}
+        assert "job_alert_events" in table_names
+        assert "job_page_indexing_events" in table_names
+        for table_name in ("job_alert_events", "job_page_indexing_events"):
+            assert _has_unique_index(conn, table_name, ["dedupe_key"])
+            prefix = f"idx_{table_name}"
+            assert f"{prefix}_sync_run" in index_names
+            assert f"{prefix}_status" in index_names
+            assert f"{prefix}_type" in index_names
+            assert f"{prefix}_job" in index_names
+            assert f"{prefix}_canonical_job" in index_names
+            assert f"{prefix}_saved_search" in index_names
+            assert _index_columns(conn, f"{prefix}_sync_run") == [
+                "sync_run_id"
+            ]
+            assert _index_columns(conn, f"{prefix}_status") == ["status"]
+            assert _index_columns(conn, f"{prefix}_type") == ["event_type"]
+            assert _index_columns(conn, f"{prefix}_job") == [
+                "source_job_id"
+            ]
+            assert _index_columns(conn, f"{prefix}_canonical_job") == [
+                "canonical_job_id"
+            ]
+            assert _index_columns(conn, f"{prefix}_saved_search") == [
+                "saved_search_id"
+            ]
+        assert _index_columns(conn, "idx_job_change_log_sync_run") == [
+            "sync_run_id"
+        ]
+        assert _index_columns(conn, "idx_job_change_log_change_type") == [
+            "change_type"
+        ]
+        assert _index_columns(conn, "idx_job_change_log_job") == ["job_id"]
+        assert _index_columns(
+            conn,
+            "idx_saved_search_ingested_jobs_lifecycle",
+        ) == ["lifecycle_state"]
+        assert _index_columns(conn, "idx_saved_search_ingested_jobs_job") == [
+            "job_id"
+        ]
+        assert _index_columns(conn, "idx_job_sync_runs_status") == ["status"]
+        assert _index_columns(conn, "idx_job_sync_runs_source_status") == [
+            "source",
+            "status",
+        ]
 
 
 def test_recent_repo_methods_work_after_migrations(monkeypatch, tmp_path) -> None:

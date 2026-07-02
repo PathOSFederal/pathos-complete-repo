@@ -69,17 +69,32 @@ def test_jobs_search_integration__canonical_shape_audit_and_cache(monkeypatch, t
 
     body = first.json()
     first_job = body["results"][0]
-    assert set(first_job.keys()) == {
+    assert {
         "id",
+        "source_job_id",
+        "announcement_number",
         "title",
         "organization",
+        "agency",
+        "department",
+        "series",
+        "pay_plan",
         "locations",
         "compensation",
+        "remote_status",
+        "telework_status",
         "open_date",
         "close_date",
         "apply_url",
+        "source_url",
+        "documents",
+        "qualifications",
+        "duties",
+        "who_may_apply",
+        "hiring_path",
+        "status",
         "source",
-    }
+    }.issubset(first_job.keys())
     assert "MatchedObjectDescriptor" not in str(body)
 
     with sqlite3.connect(db_path) as conn:
@@ -92,4 +107,3 @@ def test_jobs_search_integration__canonical_shape_audit_and_cache(monkeypatch, t
     assert row[2] == 200
     assert row[3] == 1
     assert row[4] is None
-

@@ -51,14 +51,14 @@ class UpstreamAuditRepo:
             )
 
     @staticmethod
-    def save_record(record: dict[str, Any]) -> None:
+    def save_record(record: dict[str, Any]) -> dict[str, str | None]:
         """Insert one upstream audit row.
 
         Inputs:
         - Deterministic record dict prepared by service/adapter boundary.
 
         Outputs:
-        - None.
+        - Persisted audit identifiers and raw payload hash for provenance chaining.
 
         Error behavior:
         - Propagates sqlite errors to caller.
@@ -111,6 +111,11 @@ class UpstreamAuditRepo:
                 ),
             )
             conn.commit()
+        return {
+            "id": str(record["id"]),
+            "upstream_raw_hash": raw_payload_hash,
+            "upstream_raw_payload_json": raw_payload_json,
+        }
 
     @staticmethod
     def list_recent(limit: int = 20) -> list[dict[str, Any]]:

@@ -37,6 +37,7 @@ from app.domain.jobs.canonical_models import (
     CanonicalJob,
     CanonicalSourceMetadata,
 )
+from usajobs_execution_helper import execution_from_response
 
 
 def _make_search_response(job_ids: list[str]) -> JobSearchResponse:
@@ -182,6 +183,10 @@ def test_harness__event_id_coverage_and_schema(monkeypatch, tmp_path, capsys) ->
     monkeypatch.setattr(
         "app.services.job_search_service.JobSearchService.search_jobs",
         lambda *a, **k: _make_search_response(["A1"]),
+    )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(_make_search_response(["A1"])),
     )
     monkeypatch.setattr(
         "app.services.job_search_service.JobSearchService.fingerprint_params",

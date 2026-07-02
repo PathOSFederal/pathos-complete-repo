@@ -14,12 +14,14 @@ WHAT THIS FILE MUST NOT DO:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from datetime import datetime, timezone
 from hashlib import sha256
 import logging
 import time
 from typing import Any
+from typing import Protocol
 from uuid import uuid4
 
 from app.adapters.usajobs.client import USAJobsClient
@@ -31,7 +33,12 @@ from app.adapters.usajobs.errors import (
     UpstreamUnavailableError,
 )
 from app.adapters.usajobs.models import USAJobsEnvelope
-from app.adapters.usajobs.normalize import normalize_search_items
+from app.adapters.usajobs.types import USAJobsSearchResponse
+from app.adapters.usajobs.normalize import (
+    USAJOBS_MAPPER_VERSION,
+    NormalizedUSAJobsItem,
+    normalize_search_items_with_warnings,
+)
 from app.core.config import (
     get_usajobs_cache_ttl_seconds,
     get_usajobs_api_key,
@@ -64,7 +71,29 @@ class JobSearchRateLimitedError(Exception):
     """Raised when upstream responds with rate-limit status."""
 
 
-_CACHE: dict[str, tuple[float, JobSearchResponse]] = {}
+class USAJobsSearchClient(Protocol):
+    """Minimal official-API client seam used by tests and staging validation."""
+
+    def search_jobs(self, query_params: dict[str, Any]) -> USAJobsSearchResponse:
+        """Execute one official USAJOBS search request."""
+
+
+@dataclass(frozen=True)
+class JobSearchExecutionResult:
+    """Full search execution output for bounded ingestion and audit use."""
+
+    response: JobSearchResponse
+    normalized_items: tuple[NormalizedUSAJobsItem, ...]
+    query_fingerprint: str
+    mapper_version: str
+    source_name: str
+    fetched_at: str
+    upstream_audit_id: str | None
+    upstream_raw_hash: str | None
+    query_slice: dict[str, Any]
+
+
+_CACHE: dict[str, tuple[float, JobSearchExecutionResult]] = {}
 
 
 class JobSearchService:
@@ -149,6 +178,8 @@ class JobSearchService:
             params["WorkSchedule"] = search.work_schedule.strip()
         if search.salary_min is not None:
             params["MinimumSalary"] = search.salary_min
+        if search.date_posted_days is not None:
+            params["DatePosted"] = search.date_posted_days
         return params
 
     @staticmethod
@@ -169,7 +200,7 @@ class JobSearchService:
         result_count: int,
         error_class: str | None,
         upstream_raw_payload: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, str | None]:
         """Persist deterministic upstream audit row without secrets.
 
         Inputs:
@@ -183,7 +214,7 @@ class JobSearchService:
         - Stores only hashed query identity, never raw query text.
         """
 
-        UpstreamAuditRepo.save_record(
+        return UpstreamAuditRepo.save_record(
             {
                 "id": str(uuid4()),
                 "request_id": request_id,
@@ -200,28 +231,64 @@ class JobSearchService:
         )
 
     @staticmethod
-    def search_jobs(
-        search: JobSearchRequest, request_id: str, client: USAJobsClient | None = None
+    def _record_upstream_audit_if_enabled(
+        record_upstream_audit: bool,
+        request_id: str,
+        *,
+        endpoint: str,
+        query_hash: str,
+        status_code: int,
+        latency_ms: int,
+        result_count: int,
+        error_class: str | None,
+        upstream_raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, str | None] | None:
+        """Write upstream audit only for mutating search paths.
+
+        Day 47 hardens staging dry-run semantics: when
+        `record_upstream_audit=False`, this service may still call the official
+        USAJOBS API and normalize the response, but it must not initialize the
+        database or write audit/snapshot rows on either success or failure.
+        """
+
+        if not record_upstream_audit:
+            return None
+        return JobSearchService._record_upstream_audit(
+            request_id=request_id,
+            endpoint=endpoint,
+            query_hash=query_hash,
+            status_code=status_code,
+            latency_ms=latency_ms,
+            result_count=result_count,
+            error_class=error_class,
+            upstream_raw_payload=upstream_raw_payload,
+        )
+
+    @staticmethod
+    def _response_from_execution(
+        execution: JobSearchExecutionResult,
     ) -> JobSearchResponse:
-        """Perform deterministic jobs search flow.
+        return execution.response
 
-        Inputs:
-        - `search`: validated internal request filters.
-        - `request_id`: request trace identifier from middleware.
-        - `client`: optional injected adapter client for tests.
+    @staticmethod
+    def execute_search(
+        search: JobSearchRequest,
+        request_id: str,
+        client: USAJobsSearchClient | None = None,
+        *,
+        allow_cache: bool = True,
+        record_upstream_audit: bool = True,
+    ) -> JobSearchExecutionResult:
+        """Perform deterministic job search and return audit/provenance metadata.
 
-        Outputs:
-        - `JobSearchResponse` with normalized stable records.
-
-        Error behavior:
-        - Raises typed errors for API layer to map to ErrorResponse-compatible HTTP exceptions.
+        The staging validation dry-run path sets `record_upstream_audit=False` so
+        it can fetch, validate, and normalize official USAJOBS responses without
+        mutating staging data. Normal API and worker paths keep the default audit
+        write so raw source snapshots remain preserved for real ingestions.
         """
 
         env_presence = JobSearchService.usajobs_log_env_presence()
         if not JobSearchService.usajobs_configured():
-            # Teaching note:
-            # Missing env is a local configuration skip, not an upstream attempt.
-            # We intentionally do not write an upstream audit row in this path.
             log_event(
                 logger,
                 level=logging.INFO,
@@ -243,24 +310,39 @@ class JobSearchService:
         cache_key = JobSearchService._cache_key(search)
         ttl_seconds = get_usajobs_cache_ttl_seconds()
         now = time.monotonic()
-        cached = _CACHE.get(cache_key)
-        if cached and cached[0] > now:
-            return cached[1]
+        effective_allow_cache = allow_cache and record_upstream_audit
+        if effective_allow_cache:
+            cached = _CACHE.get(cache_key)
+            if cached and cached[0] > now:
+                return cached[1]
 
+        upstream_audit_id: str | None = None
+        upstream_raw_hash: str | None = None
         try:
             upstream = adapter.search_jobs(query_params=query_params)
-            JobSearchService._record_upstream_audit(
-                request_id=request_id,
-                endpoint=upstream.audit.endpoint,
-                query_hash=upstream.audit.query_hash,
-                status_code=upstream.audit.status_code,
-                latency_ms=upstream.audit.latency_ms,
-                result_count=upstream.audit.result_count,
-                error_class=upstream.audit.error_class,
-                upstream_raw_payload=upstream.payload,
-            )
+            if record_upstream_audit:
+                upstream_record = JobSearchService._record_upstream_audit(
+                    request_id=request_id,
+                    endpoint=upstream.audit.endpoint,
+                    query_hash=upstream.audit.query_hash,
+                    status_code=upstream.audit.status_code,
+                    latency_ms=upstream.audit.latency_ms,
+                    result_count=upstream.audit.result_count,
+                    error_class=upstream.audit.error_class,
+                    upstream_raw_payload=upstream.payload,
+                )
+                upstream_audit_id = upstream_record.get("id")
+                upstream_raw_hash = upstream_record.get("upstream_raw_hash")
+            else:
+                payload_json = json.dumps(
+                    upstream.payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                upstream_raw_hash = sha256(payload_json.encode("utf-8")).hexdigest()
         except UpstreamRateLimitError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -271,8 +353,6 @@ class JobSearchService:
             )
             raise JobSearchRateLimitedError("USAJOBS rate limit exceeded") from exc
         except UpstreamConfigError as exc:
-            # Adapter-level config errors are treated as local skip/config state.
-            # Keep parity with pre-check behavior: do not persist upstream-audit row.
             log_event(
                 logger,
                 level=logging.INFO,
@@ -289,7 +369,8 @@ class JobSearchService:
                 "USAJOBS fetch is disabled because required environment variables are missing."
             ) from exc
         except UpstreamAuthError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -300,7 +381,8 @@ class JobSearchService:
             )
             raise JobSearchUpstreamAuthError("USAJOBS authentication failed") from exc
         except UpstreamUnavailableError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -311,7 +393,8 @@ class JobSearchService:
             )
             raise JobSearchUpstreamUnavailableError("USAJOBS is unavailable") from exc
         except UpstreamResponseError as exc:
-            JobSearchService._record_upstream_audit(
+            JobSearchService._record_upstream_audit_if_enabled(
+                record_upstream_audit,
                 request_id=request_id,
                 endpoint="/api/search",
                 query_hash=cache_key,
@@ -329,12 +412,16 @@ class JobSearchService:
                 "USAJOBS response schema validation failed"
             ) from exc
 
-        mapped = normalize_search_items(envelope.SearchResult.SearchResultItems)
+        retrieved_at = datetime.now(timezone.utc).isoformat()
+        normalized_items = normalize_search_items_with_warnings(
+            envelope.SearchResult.SearchResultItems,
+            retrieved_at=retrieved_at,
+        )
         if search.remote_only is True:
-            mapped = [
+            normalized_items = [
                 row
-                for row in mapped
-                if any("remote" in location.lower() for location in row.locations)
+                for row in normalized_items
+                if row.job.remote_status == "remote"
             ]
 
         total_raw = envelope.SearchResult.SearchResultCountAll
@@ -344,17 +431,63 @@ class JobSearchService:
             total = int(str(total_raw or "0"))
 
         if search.remote_only is True:
-            total = len(mapped)
+            total = len(normalized_items)
 
-        result = JobSearchResponse(
-            results=mapped,
+        response = JobSearchResponse(
+            results=[row.job for row in normalized_items],
             total=total,
             page=search.page,
             page_size=search.page_size,
             request_id=request_id,
         )
-        _CACHE[cache_key] = (now + ttl_seconds, result)
-        return result
+        execution = JobSearchExecutionResult(
+            response=response,
+            normalized_items=tuple(normalized_items),
+            query_fingerprint=cache_key,
+            mapper_version=USAJOBS_MAPPER_VERSION,
+            source_name="USAJOBS_OFFICIAL_API",
+            fetched_at=retrieved_at,
+            upstream_audit_id=upstream_audit_id,
+            upstream_raw_hash=upstream_raw_hash,
+            query_slice={
+                "page": search.page,
+                "page_size": search.page_size,
+                "remote_only": bool(search.remote_only),
+                "query_fingerprint": cache_key,
+            },
+        )
+        if effective_allow_cache:
+            _CACHE[cache_key] = (now + ttl_seconds, execution)
+        return execution
+
+    @staticmethod
+    def search_jobs(
+        search: JobSearchRequest,
+        request_id: str,
+        client: USAJobsSearchClient | None = None,
+    ) -> JobSearchResponse:
+        """Perform deterministic jobs search flow.
+
+        Inputs:
+        - `search`: validated internal request filters.
+        - `request_id`: request trace identifier from middleware.
+        - `client`: optional injected adapter client for tests.
+
+        Outputs:
+        - `JobSearchResponse` with normalized stable records.
+
+        Error behavior:
+        - Raises typed errors for API layer to map to ErrorResponse-compatible HTTP exceptions.
+        """
+
+        return JobSearchService._response_from_execution(
+            JobSearchService.execute_search(
+                search=search,
+                request_id=request_id,
+                client=client,
+                allow_cache=True,
+            )
+        )
 
     @staticmethod
     def fingerprint_params(search: JobSearchRequest) -> str:

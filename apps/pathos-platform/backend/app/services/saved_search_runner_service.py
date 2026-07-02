@@ -15,6 +15,7 @@ from app.services.job_scoring_ruleset import DEFAULT_JOB_SCORING_RULESET
 from app.services.job_scoring_service import JobScoringService
 from app.services.job_search_service import JobSearchService
 from app.services.saved_search_service import SavedSearchService
+from app.services.usajobs_ingestion_service import USAJobsIngestionService
 
 logger = logging.getLogger("pathos.saved_search_runner")
 
@@ -36,8 +37,18 @@ class SavedSearchRunnerService:
         filters_blob = saved.query_payload.get("filters", {})
         search_request = JobSearchRequest.model_validate(filters_blob)
         fetch_started = time.monotonic()
-        search_result = JobSearchService.search_jobs(search=search_request, request_id=request_id)
+        execution = JobSearchService.execute_search(
+            search=search_request,
+            request_id=request_id,
+            allow_cache=False,
+        )
+        search_result = execution.response
         fetch_ms = int((time.monotonic() - fetch_started) * 1000)
+        ingestion_summary = USAJobsIngestionService.ingest_saved_search_results(
+            saved_search_id=saved_search_id,
+            execution=execution,
+            trigger_mode="saved_search_runner",
+        )
 
         profile = (
             JobScoringProfileV1.model_validate(saved.profile_payload)
@@ -74,10 +85,6 @@ class SavedSearchRunnerService:
             ),
         )
 
-        mapper_version = None
-        if ranked:
-            mapper_version = ranked[0]["score"].get("mapper_version")
-
         log_event(
             logger,
             level=logging.INFO,
@@ -95,10 +102,13 @@ class SavedSearchRunnerService:
         return {
             "saved_search_id": saved_search_id,
             "ruleset_version": saved.ruleset_version,
-            "mapper_version": mapper_version,
+            "mapper_version": execution.mapper_version,
             "total": search_result.total,
             "results": ranked,
-            "query_fingerprint": JobSearchService.fingerprint_params(search_request),
+            "query_fingerprint": execution.query_fingerprint,
+            "upstream_audit_id": execution.upstream_audit_id,
+            "upstream_raw_hash": execution.upstream_raw_hash,
+            "ingestion_summary": ingestion_summary,
             "profile_payload": json.loads(json.dumps(saved.profile_payload, sort_keys=True))
             if saved.profile_payload is not None
             else None,

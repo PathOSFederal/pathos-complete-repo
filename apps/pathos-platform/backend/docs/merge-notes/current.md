@@ -4090,3 +4090,2215 @@ bash -lc "ls -lh artifacts/phase-1-backend-foundation-hardening.patch artifacts/
 - Tests run: lint, mypy, targeted pytest subset, full pytest, openapi export
 - Phase 1 status: complete
 - Recommended next branch: `git checkout -b feature/backend-usajobs-ingestion-v1`
+
+## 2026-03-25 - Phase 2 - Backend USAJOBS Ingestion v1
+
+### Summary of changes
+- Implemented bounded canonical USAJOBS persistence through saved-search and alert-run execution paths instead of leaving runtime job results transient.
+- Added warning-aware normalization and stronger provenance chaining: mapper version, upstream audit ID, upstream raw hash, query fingerprint, and bounded slice context now persist with ingested jobs.
+- Added a dedicated bounded ingestion repo/service pair and mirrored migration support in both portable SQL and Alembic.
+- Updated tests to target the new execution seam and added direct coverage for idempotent upsert behavior, official-source-only enforcement, mapper warning behavior, and provenance retention.
+- Updated README and added a non-technical change brief for this phase.
+
+### Files changed
+- `app/adapters/usajobs/normalize.py`
+- `app/services/job_search_service.py`
+- `app/services/saved_search_runner_service.py`
+- `app/services/alert_service.py`
+- `app/services/usajobs_ingestion_service.py`
+- `app/db/repo/upstream_audit_repo.py`
+- `app/db/repo/saved_search_repo.py`
+- `app/db/repo/saved_search_ingested_job_repo.py`
+- `app/db/migrations/013_saved_search_ingested_jobs_v1.sql`
+- `alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py`
+- `app/services/wipe_service.py`
+- `README.md`
+- `docs/change-briefs/backend-usajobs-ingestion-v1.md`
+- targeted test files under `tests/`
+
+### Commands run
+```powershell
+poetry run ruff check app tests README.md
+poetry run mypy app tests
+poetry run pytest -q tests\api\jobs\test__positive__normalize.py tests\db\repo\test_saved_search_ingested_job_repo.py tests\services\test_usajobs_ingestion_service.py tests\services\test_saved_search_runner_service.py tests\api\alerts\test__categories__alerts.py tests\api\alerts\test__categories__alerts_run_v1.py tests\api\alerts\test__categories__alerts_observability_v1.py tests\edge_case\test_edge_case_testing_hardening_v1.py tests\use_case\test_use_case_testing_hardening_v1.py
+poetry run pytest --no-cov -q tests\api\jobs\test__positive__normalize.py tests\db\repo\test_saved_search_ingested_job_repo.py tests\services\test_usajobs_ingestion_service.py tests\services\test_saved_search_runner_service.py tests\api\alerts\test__categories__alerts.py tests\api\alerts\test__categories__alerts_run_v1.py tests\api\alerts\test__categories__alerts_observability_v1.py tests\edge_case\test_edge_case_testing_hardening_v1.py tests\use_case\test_use_case_testing_hardening_v1.py
+poetry run pytest -q
+git status --short
+git branch --show-current
+git diff --name-status develop...HEAD
+git diff --stat develop...HEAD
+git diff develop...HEAD > artifacts/phase-2-backend-usajobs-ingestion.patch
+git diff > artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/phase-2-backend-usajobs-ingestion-this-run.patch"
+```
+
+### Results
+- `poetry run ruff check app tests README.md`
+  - passed
+- `poetry run mypy app tests`
+  - passed
+- targeted USAJOBS/ingestion pytest subset with coverage enabled
+  - behavior passed, but the repo coverage gate failed as expected for a partial slice run: `33 passed`, total coverage `63.23%`, below fail-under `90`
+- targeted USAJOBS/ingestion pytest subset without coverage
+  - passed: `33 passed in 53.52s`
+- full `poetry run pytest -q`
+  - passed: `278 passed, 10 skipped`
+  - coverage passed: `90.97%`
+- live USAJOBS verification requests made during this run
+  - `0`
+
+### Known issues
+- The feature branch already existed and was already checked out when this run started, so `git checkout -b feature/backend-usajobs-ingestion-v1` was not re-run.
+- `git diff develop...HEAD` is empty in this repo state because the Phase 2 work is still entirely uncommitted on the current feature branch. The cumulative patch file is therefore `0` bytes.
+- There are unrelated frontend worktree changes present in the parent repo. They were left untouched.
+- No live USAJOBS API verification call was used. The adapter path remains validated through fixtures/mocks plus the existing official-API client implementation.
+
+### Git state
+#### git status
+```text
+ M README.md
+ M app/adapters/usajobs/normalize.py
+ M app/db/repo/saved_search_repo.py
+ M app/db/repo/upstream_audit_repo.py
+ M app/services/alert_service.py
+ M app/services/job_search_service.py
+ M app/services/saved_search_runner_service.py
+ M app/services/wipe_service.py
+ M tests/api/alerts/test__categories__alerts.py
+ M tests/api/alerts/test__categories__alerts_observability_v1.py
+ M tests/api/alerts/test__categories__alerts_run_v1.py
+ M tests/api/jobs/test__positive__normalize.py
+ M tests/edge_case/test_edge_case_testing_hardening_v1.py
+ M tests/services/test_saved_search_runner_service.py
+ M tests/test_alembic_migrations.py
+ M tests/test_log_event_registry_and_schema.py
+ M tests/use_case/test_use_case_testing_hardening_v1.py
+ M ../frontend/docs/merge-notes/current.md
+ M ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+?? alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+?? app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+?? app/db/repo/saved_search_ingested_job_repo.py
+?? app/services/usajobs_ingestion_service.py
+?? docs/change-briefs/backend-usajobs-ingestion-v1.md
+?? tests/db/repo/test_saved_search_ingested_job_repo.py
+?? tests/services/test_usajobs_ingestion_service.py
+?? tests/usajobs_execution_helper.py
+?? ../frontend/docs/change-briefs/resume-builder-phase1.md
+?? ../frontend/docs/change-briefs/resume-builder-phase2.md
+?? ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+```
+
+#### git branch --show-current
+```text
+feature/backend-usajobs-ingestion-v1
+```
+
+#### git diff --name-status develop...HEAD
+```text
+```
+
+#### git diff --stat develop...HEAD
+```text
+```
+
+### Patch artifacts
+Commands:
+```powershell
+git diff develop...HEAD > artifacts/phase-2-backend-usajobs-ingestion.patch
+git diff > artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/phase-2-backend-usajobs-ingestion-this-run.patch"
+```
+
+`bash -lc "ls -lh artifacts/phase-2-backend-usajobs-ingestion.patch artifacts/phase-2-backend-usajobs-ingestion-this-run.patch"` output:
+```text
+-rwxrwxrwx 1 joriel joriel 244K Mar 25 18:50 artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+-rwxrwxrwx 1 joriel joriel    0 Mar 25 18:50 artifacts/phase-2-backend-usajobs-ingestion.patch
+```
+
+## Phase 2 completion assessment
+- Completed
+  - bounded official-USAJOBS ingestion now exists as a real runtime capability through saved-search and alert-run flows
+  - canonical mapping now emits deterministic warning metadata instead of silently flattening malformed upstream fields
+  - provenance is materially stronger: official source identity, mapper version, query fingerprint, upstream audit ID, upstream raw hash, and bounded slice context are preserved
+  - idempotent upsert behavior is implemented for bounded canonical records
+  - checkpoint and alert-run infrastructure now sits on stable canonical persistence instead of only transient search results
+- Partially open
+  - bounded ingestion is run-driven, not yet exposed through a dedicated operator-facing sync command or runbook section beyond README guidance
+  - no live quota-consuming integration proof was executed in this run, by design
+  - qualification and recommendation intelligence still do not exist; this phase only prepared the data foundation
+- Ready for Phase 3 deterministic qualification engine v1
+  - yes
+
+### End-of-run summary
+- Files changed: USAJOBS normalization, job-search execution, bounded ingestion repo/service/migrations, saved-search and alert-run ingestion hooks, tests, README, merge-notes, change brief
+- Tests run: ruff, mypy, targeted pytest subset with and without coverage, full pytest
+- Phase 2 status: complete
+- Recommended next branch: `git checkout -b feature/backend-qualification-engine-v1`
+
+## 2026-06-30 - Sync Job Staging Validation Slice
+
+### Summary
+- Added staging-safe USAJOBS sync validation support on top of the existing saved-search ingestion path.
+- Added `job_sync_runs` and `job_change_log` persistence for health and meaningful change tracking.
+- Added dry-run support that fetches and normalizes official USAJOBS data without writing staging records or upstream raw audit rows.
+- Added a bounded staging CLI for series `2210`, Florida, last 7 days, max 1-2 pages.
+- Added fixture tests for new ingestion, repeat idempotency, raw snapshot preservation, content hash behavior, canonical field comparison, salary/location/remote/closing-date/document/qualification changes, closed lifecycle handling, failed partition handling, duplicate prevention, and telework not being treated as fully remote.
+- Added staging runbook and non-technical change brief.
+
+### Human Simulation Gate
+| Item | Value |
+|------|-------|
+| Required | No |
+| Triggers hit | none |
+| Why | Backend sync, repository, CLI, and documentation work only; no browser UI, navigation, hydration, or localStorage flow changed. |
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API fetch -> JobSearchService normalization -> USAJobsIngestionService dry-run or bounded write -> saved_search_ingested_jobs/job_sync_runs/job_change_log -> ops health output |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Staging could misread duplicate, stale, changed, or closed jobs before production sync validation. |
+| How tested | Deterministic pytest fixtures, ruff, mypy, migration tests; full pytest attempted but timed out after 244 seconds. |
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run pytest -q tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py --cov=app --cov-fail-under=0
+Result: passed, 27 passed in 36.60s
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 224 source files
+
+poetry run pytest -q tests/test_alembic_migrations.py --cov=app --cov-fail-under=0
+Result: passed, 1 passed, 1 skipped in 7.15s
+
+poetry run pytest -q tests/test_migrations_runner.py --cov=app --cov-fail-under=0
+Result: passed, 3 passed in 8.79s
+
+poetry run pytest -q
+Result: not completed; command timed out after 244 seconds before returning output.
+```
+
+### Git Status
+```text
+On branch feature/backend-usajobs-ingestion-v1
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   README.md
+	new file:   alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+	modified:   app/adapters/usajobs/normalize.py
+	new file:   app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+	new file:   app/db/repo/saved_search_ingested_job_repo.py
+	modified:   app/db/repo/saved_search_repo.py
+	modified:   app/db/repo/upstream_audit_repo.py
+	modified:   app/services/alert_service.py
+	modified:   app/services/job_search_service.py
+	modified:   app/services/saved_search_runner_service.py
+	new file:   app/services/usajobs_ingestion_service.py
+	modified:   app/services/wipe_service.py
+	new file:   docs/change-briefs/backend-usajobs-ingestion-v1.md
+	modified:   docs/merge-notes/current.md
+	modified:   tests/api/alerts/test__categories__alerts.py
+	modified:   tests/api/alerts/test__categories__alerts_observability_v1.py
+	modified:   tests/api/alerts/test__categories__alerts_run_v1.py
+	modified:   tests/api/jobs/test__positive__normalize.py
+	new file:   tests/db/repo/test_saved_search_ingested_job_repo.py
+	modified:   tests/edge_case/test_edge_case_testing_hardening_v1.py
+	modified:   tests/services/test_saved_search_runner_service.py
+	new file:   tests/services/test_usajobs_ingestion_service.py
+	modified:   tests/test_alembic_migrations.py
+	modified:   tests/test_log_event_registry_and_schema.py
+	new file:   tests/usajobs_execution_helper.py
+	modified:   tests/use_case/test_use_case_testing_hardening_v1.py
+	new file:   ../frontend/docs/change-briefs/resume-builder-phase1.md
+	new file:   ../frontend/docs/change-briefs/resume-builder-phase2.md
+	new file:   ../frontend/docs/change-briefs/resume-builder-ux-compression.md
+	modified:   ../frontend/docs/merge-notes/current.md
+	new file:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+	modified:   ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+	new file:   ../../../restructure-safety/backend-path-status.txt
+	new file:   ../../../restructure-safety/backend-repo-branch.txt
+	new file:   ../../../restructure-safety/backend-repo-remotes.txt
+	new file:   ../../../restructure-safety/backend-repo-status.txt
+	new file:   ../../../restructure-safety/frontend-path-status.txt
+	new file:   ../../../restructure-safety/frontend-repo-branch.txt
+	new file:   ../../../restructure-safety/frontend-repo-remotes.txt
+	new file:   ../../../restructure-safety/frontend-repo-status.txt
+	new file:   ../../../restructure-safety/root-branch.txt
+	new file:   ../../../restructure-safety/root-full-status.txt
+	new file:   ../../../restructure-safety/root-log.txt
+	new file:   ../../../restructure-safety/root-remotes.txt
+	new file:   ../../../restructure-safety/root-status-after-split.txt
+	new file:   ../../../restructure-safety/root-status.txt
+	new file:   ../../../restructure-safety/snapshot-timestamp.txt
+	new file:   ../../../restructure-safety/split-validation-summary.json
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   README.md
+	modified:   alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+	modified:   app/api/v1/ops.py
+	modified:   app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+	new file:   app/db/repo/job_sync_run_repo.py
+	modified:   app/db/repo/saved_search_ingested_job_repo.py
+	modified:   app/models/job_search.py
+	modified:   app/services/job_search_service.py
+	modified:   app/services/usajobs_ingestion_service.py
+	new file:   docs/change-briefs/sync-job-staging-validation.md
+	new file:   docs/runbook/usajobs-sync-staging-validation.md
+	new file:   scripts/usajobs_staging_validation.py
+	modified:   tests/db/repo/test_saved_search_ingested_job_repo.py
+	modified:   tests/services/test_usajobs_ingestion_service.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	../../../usajobs-sync.env.ps1
+```
+
+### Branch
+```text
+feature/backend-usajobs-ingestion-v1
+```
+
+### git diff --name-status develop...HEAD
+```text
+
+```
+
+### git diff --stat develop...HEAD
+```text
+
+```
+
+### Patch Artifacts
+```text
+artifacts/sync-job-staging-validation.patch - 0 bytes
+artifacts/sync-job-staging-validation-this-run.patch - 83K
+```
+
+### Notes
+- `git diff develop...HEAD` is empty because this slice is uncommitted working-tree work layered on the current feature branch.
+- `git add -N .` was used before patch generation so new files are represented in `git diff` without committing.
+- Existing unrelated frontend and restructure-safety intent-to-add entries were already present in the broader worktree and were not modified for this slice.
+- No production scheduler setting was changed.
+- No live email delivery or external indexing submission was enabled.
+- No USAJOBS scraping was added.
+
+### Final git state refresh
+#### git status
+```text
+ M README.md
+ M app/adapters/usajobs/normalize.py
+ M app/db/repo/saved_search_repo.py
+ M app/db/repo/upstream_audit_repo.py
+ M app/services/alert_service.py
+ M app/services/job_search_service.py
+ M app/services/saved_search_runner_service.py
+ M app/services/wipe_service.py
+ M docs/merge-notes/current.md
+ M tests/api/alerts/test__categories__alerts.py
+ M tests/api/alerts/test__categories__alerts_observability_v1.py
+ M tests/api/alerts/test__categories__alerts_run_v1.py
+ M tests/api/jobs/test__positive__normalize.py
+ M tests/edge_case/test_edge_case_testing_hardening_v1.py
+ M tests/services/test_saved_search_runner_service.py
+ M tests/test_alembic_migrations.py
+ M tests/test_log_event_registry_and_schema.py
+ M tests/use_case/test_use_case_testing_hardening_v1.py
+ M ../frontend/docs/merge-notes/current.md
+ M ../frontend/packages/ui/src/screens/ResumeBuilderScreen.tsx
+?? alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+?? app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+?? app/db/repo/saved_search_ingested_job_repo.py
+?? app/services/usajobs_ingestion_service.py
+?? docs/change-briefs/backend-usajobs-ingestion-v1.md
+?? tests/db/repo/test_saved_search_ingested_job_repo.py
+?? tests/services/test_usajobs_ingestion_service.py
+?? tests/usajobs_execution_helper.py
+?? ../frontend/docs/change-briefs/resume-builder-phase1.md
+?? ../frontend/docs/change-briefs/resume-builder-phase2.md
+?? ../frontend/docs/change-briefs/resume-builder-ux-compression.md
+?? ../frontend/packages/ui/src/screens/ResumeBuilderScreen.test.tsx
+```
+
+#### patch artifact sizes
+```text
+-rwxrwxrwx 1 joriel joriel 257K Mar 25 18:52 artifacts/phase-2-backend-usajobs-ingestion-this-run.patch
+-rwxrwxrwx 1 joriel joriel    0 Mar 25 18:52 artifacts/phase-2-backend-usajobs-ingestion.patch
+```
+## 2026-07-01 - Day 46 Checkpoint And Production-Readiness Roadmap
+
+### Branch
+```text
+feature/backend-usajobs-ingestion-v1
+```
+
+### Scope
+- Checkpoint the current USAJOBS sync staging-validation slice without fixing the known review blockers.
+- Regenerate patch artifacts before commit.
+- Preserve the review verdict: not merge-ready.
+- Add `docs/roadmaps/usajobs-sync-production-readiness-days.md` for Day 47 through Day 56 follow-up work.
+- Make tiny documentation hygiene edits so the runbook and change brief do not overstate dry-run safety before Day 47.
+
+### Known Merge Blockers Preserved
+- Dry-run can still mutate staging on upstream error paths because upstream audit records may be written when `record_upstream_audit=False`.
+- Staging write mode is not environment-gated.
+- Alert/indexing behavior is documented as queue-only, but the implementation currently appears to store counters rather than persisted deduped queue rows.
+- Production canonical USAJOBS jobs do not yet prove all fields tested by fixture-only dictionaries.
+
+### Known Should-Fix Items Preserved
+- Dry-run output marks every fetched item as new and is weak for staging idempotency validation.
+- Remote/telework classification should prefer explicit USAJOBS remote indicators.
+- Closed-job handling must be guarded against partial partitions.
+- Health endpoint needs direct tests for auth, no-row, populated-row, and sanitized-error cases.
+- Schema integrity should be hardened with relationships, indexes, and constraints where appropriate.
+
+### Pre-Commit Git State
+```text
+git status
+Result: branch feature/backend-usajobs-ingestion-v1 with backend USAJOBS sync validation changes plus unrelated pre-existing staged frontend/restructure-safety files. Those unrelated files are intentionally excluded from this checkpoint commit.
+
+git branch --show-current
+Result: feature/backend-usajobs-ingestion-v1
+
+git diff --name-status
+Result: 15 backend slice files changed:
+M apps/pathos-platform/backend/README.md
+M apps/pathos-platform/backend/alembic/versions/20260325_000001_add_saved_search_ingested_jobs_table_v1.py
+M apps/pathos-platform/backend/app/api/v1/ops.py
+M apps/pathos-platform/backend/app/db/migrations/013_saved_search_ingested_jobs_v1.sql
+A apps/pathos-platform/backend/app/db/repo/job_sync_run_repo.py
+M apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
+M apps/pathos-platform/backend/app/models/job_search.py
+M apps/pathos-platform/backend/app/services/job_search_service.py
+M apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
+A apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+A apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+A apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+M apps/pathos-platform/backend/tests/db/repo/test_saved_search_ingested_job_repo.py
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+
+git diff --stat
+Result: 15 files changed, 1555 insertions(+), 42 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 224 source files
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py -q --cov=app --cov-fail-under=0
+Result: passed, 27 passed in 39.35s
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 4 passed, 1 skipped in 16.33s
+
+poetry run pytest -q --maxfail=1
+Result: timed out after 248 seconds with no failure surfaced before timeout.
+Prior collection evidence: pytest collection previously completed and collected 297 tests.
+Recommended next narrow command: poetry run pytest --no-cov -vv --durations=20 --maxfail=1 tests
+```
+
+### Patch Artifacts Before Commit
+```text
+artifacts/sync-job-staging-validation.patch: 0 bytes
+artifacts/sync-job-staging-validation-this-run.patch: 84723 bytes
+```
+
+Note: the cumulative `develop...HEAD` artifact is 0 bytes before commit because the work is still uncommitted. Regenerate patch artifacts after the checkpoint commit.
+
+### Production-Readiness Roadmap
+- Added `docs/roadmaps/usajobs-sync-production-readiness-days.md`.
+- Next recommended continuation prompt: Day 47 dry-run safety and environment gates.
+
+### Merge Readiness
+- Status: not merge-ready.
+- Do not open a PR, merge, enable production scheduler changes, enable real email delivery, or enable external indexing submissions from this checkpoint.
+
+### Checkpoint Commit
+```text
+git commit -m "#feature/backend-usajobs-ingestion-v1 Day 46 - add USAJOBS sync staging validation"
+Result: committed 2d85e55737095cffde277d8174b7a26f306ef913
+```
+
+### Artifact Refresh After Commit
+- Cumulative patch must be regenerated after `2d85e55737095cffde277d8174b7a26f306ef913` so it is no longer a 0-byte pre-commit placeholder.
+- The artifact refresh is expected to be committed separately if artifact files changed.
+- Push result will be reported in the final handoff after the refreshed artifact commit is pushed.
+
+## 2026-07-01 - Day 47 USAJOBS Sync Safety Gates
+
+### Branch
+```text
+feature/voloro-day-47-usajobs-sync-safety-gates
+```
+
+### Summary
+- Hardened `JobSearchService.execute_search(..., record_upstream_audit=False)` so dry-run paths do not write upstream audit rows on rate-limit, auth, unavailable, schema/contract, or unexpected upstream failures.
+- Disabled job-search cache reads and writes when `record_upstream_audit=False`, preserving dry-run read-only behavior beyond database rows.
+- Added `--confirm-staging-write` to `scripts/usajobs_staging_validation.py`.
+- Added write-mode environment gates that allow only safe non-production runtime labels and block production-like or unknown labels by default.
+- Updated staging runbook, change briefs, and production-readiness roadmap.
+
+### Human Simulation Gate
+| Item | Value |
+|------|-------|
+| Required | No |
+| Triggers hit | none |
+| Why | Backend service, CLI, and documentation changes only; no browser UI, navigation, hydration, or localStorage behavior changed. |
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API fetch -> `JobSearchService.execute_search(record_upstream_audit=False)` -> dry-run normalization/summary with no audit/cache writes -> staging CLI dry-run output |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Dry-run could leave durable audit rows or operators could run write mode against the wrong environment before staging validation. |
+| How tested | Added service tests for dry-run success, cache suppression, and upstream failure paths; added CLI tests for confirmation and environment gates; ran ruff, mypy, targeted pytest, migration pytest, and collect-only. |
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-47-usajobs-sync-safety-gates with Day 47 backend files modified/untracked; unrelated frontend/restructure-safety files remain in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-47-usajobs-sync-safety-gates
+
+git diff --name-status develop...HEAD
+Result: includes the committed Day 46 USAJOBS checkpoint baseline plus this Day 47 branch lineage. Day 47-specific files changed in this run:
+M apps/pathos-platform/backend/app/services/job_search_service.py
+M apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+A apps/pathos-platform/backend/tests/scripts/test_usajobs_staging_validation_cli.py
+M apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+M apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+A apps/pathos-platform/backend/docs/change-briefs/day-47-usajobs-sync-safety-gates.md
+M apps/pathos-platform/backend/docs/roadmaps/usajobs-sync-production-readiness-days.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+
+git diff --stat develop...HEAD
+Result: develop baseline includes the Day 46 checkpoint plus Day 47 lineage; latest observed output before final artifact regeneration was 35 files changed, 6909 insertions(+), 145 deletions(-).
+
+git diff --stat -- .
+Result for Day 47 backend working-tree files: 9 files changed, 506 insertions(+), 17 deletions(-).
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 225 source files
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/scripts/test_usajobs_staging_validation_cli.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py -q --cov=app --cov-fail-under=0
+Result: passed, 41 passed in 32.60s
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 4 passed, 1 skipped in 6.39s
+
+poetry run pytest --collect-only -q
+Result: completed collection, 309 tests collected in 11.11s. The repo coverage plugin still printed "FAIL Required test coverage of 90% not reached" during collect-only because no tests execute under collection.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-47-usajobs-sync-safety-gates.patch - 360763 bytes
+artifacts/day-47-usajobs-sync-safety-gates-this-run.patch - 240636 bytes
+```
+
+### Remaining Known Blockers
+- Day 48: implement real alert/indexing queue rows with dedupe; current behavior still records queue/accounting counts only.
+- Day 49: normalize remaining canonical USAJOBS fields from real production payloads instead of relying on ad hoc fixture dictionary fields.
+- Day 50+: lifecycle guards, ops health endpoint tests, schema hardening, full pytest runtime triage, and actual staging dry-run/write/repeat validation remain.
+
+### Merge Readiness
+- Day 47 slice: conditionally merge-ready after review.
+- Overall USAJOBS production readiness: not merge-ready until Day 48+ blockers are complete.
+
+## 2026-07-01 - Day 47 Missing PATHOS_ENV Fail-Closed Patch
+
+### Branch
+```text
+feature/voloro-day-47-usajobs-sync-safety-gates
+```
+
+### Summary
+- Patched `scripts/usajobs_staging_validation.py` so write mode reads the raw explicit `PATHOS_ENV` before backend config defaults are applied.
+- Missing or blank `PATHOS_ENV` now fails closed for `--mode write --confirm-staging-write`.
+- Dry-run remains easy to run without `PATHOS_ENV` and without `--confirm-staging-write`.
+- Updated CLI tests, dry-run failure coverage, runbook, Day 47 change brief, and the production-readiness roadmap.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-47-usajobs-sync-safety-gates with Day 47 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-47-usajobs-sync-safety-gates
+
+git diff --name-status develop...HEAD
+Result: 35 files changed in the cumulative branch baseline, including the Day 46 USAJOBS checkpoint lineage and existing artifacts. Day 47-specific working-tree files are:
+M apps/pathos-platform/backend/app/services/job_search_service.py
+A apps/pathos-platform/backend/docs/change-briefs/day-47-usajobs-sync-safety-gates.md
+M apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+M apps/pathos-platform/backend/docs/roadmaps/usajobs-sync-production-readiness-days.md
+M apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+M apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+A apps/pathos-platform/backend/tests/scripts/test_usajobs_staging_validation_cli.py
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+
+git diff --stat develop...HEAD
+Result: 35 files changed, 6909 insertions(+), 145 deletions(-)
+
+git diff --stat -- .
+Result: 9 backend working-tree files changed, 603 insertions(+), 17 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 225 source files
+
+poetry run pytest tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 18 passed in 7.12s
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py -q --cov=app --cov-fail-under=0
+Result: passed, 35 passed in 31.19s
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 4 passed, 1 skipped in 8.12s
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 323 tests in 9.94s. The coverage plugin still printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+```
+
+### Patched Must-Fix
+- `--mode write --confirm-staging-write` with missing `PATHOS_ENV` is blocked with safe JSON stderr and remediation to set `PATHOS_ENV=staging`.
+- `--mode write --confirm-staging-write` with blank `PATHOS_ENV` is blocked the same way.
+- Safe explicit aliases allowed: `local`, `dev`, `development`, `test`, `ci`, `staging`, `qa`, `sandbox`.
+- Production-like aliases blocked: `production`, `prod`, `main`, `live`.
+
+### Patch Artifacts
+```text
+artifacts/day-47-usajobs-sync-safety-gates.patch - 360763 bytes
+artifacts/day-47-usajobs-sync-safety-gates-this-run.patch - 249272 bytes
+```
+
+### Remaining Known Blockers
+- Day 48: real alert/indexing queue rows with dedupe remain out of scope for this patch.
+- Day 49: canonical USAJOBS normalization hardening remains out of scope for this patch.
+- Day 50+: lifecycle guards, ops health endpoint tests, schema hardening, full pytest runtime triage, and actual staging dry-run/write/repeat validation remain.
+
+### Merge Readiness
+- Day 47 slice after this must-fix patch: merge-ready, pending human review of the final diff and artifacts.
+- Overall USAJOBS production readiness remains not merge-ready until Day 48+ work is complete.
+
+## 2026-07-01 - Day 47 Environment Alias Leak Patch
+
+### Branch
+```text
+feature/voloro-day-47-usajobs-sync-safety-gates
+```
+
+### Summary
+- Patched the USAJOBS staging validation write gate so raw explicit `PATHOS_ENV` is trimmed and lowercased, then checked directly against the Day 47 allowlist.
+- Removed config alias expansion from write-mode permission checks, so `PATHOS_ENV=stage`, `PATHOS_ENV=Stage`, and `PATHOS_ENV=" stage "` are intentionally blocked.
+- Preserved dry-run behavior: no `PATHOS_ENV` or `--confirm-staging-write` required.
+- Documented that `staging` is the intended staging value and config aliases do not expand write permissions.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-47-usajobs-sync-safety-gates with Day 47 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-47-usajobs-sync-safety-gates
+
+git diff --name-status develop...HEAD
+Result: 35 files changed in the cumulative branch baseline, including the Day 46 USAJOBS checkpoint lineage and existing artifacts. Day 47-specific working-tree files are:
+M apps/pathos-platform/backend/app/services/job_search_service.py
+A apps/pathos-platform/backend/docs/change-briefs/day-47-usajobs-sync-safety-gates.md
+M apps/pathos-platform/backend/docs/change-briefs/sync-job-staging-validation.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+M apps/pathos-platform/backend/docs/roadmaps/usajobs-sync-production-readiness-days.md
+M apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+M apps/pathos-platform/backend/scripts/usajobs_staging_validation.py
+A apps/pathos-platform/backend/tests/scripts/test_usajobs_staging_validation_cli.py
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+
+git diff --stat develop...HEAD
+Result: 35 files changed, 6909 insertions(+), 145 deletions(-)
+
+git diff --stat -- .
+Result: 9 backend working-tree files changed, 723 insertions(+), 17 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 225 source files
+
+poetry run pytest tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 23 passed in 6.30s
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_saved_search_runner_service.py tests/api/jobs/test__positive__normalize.py tests/api/jobs/test__categories__jobs_search.py -q --cov=app --cov-fail-under=0
+Result: passed, 35 passed in 30.81s
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 328 tests in 10.94s. The coverage plugin still printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests
+Result: passed.
+```
+
+### Patched Must-Fix
+- `PATHOS_ENV=stage` is intentionally blocked for write mode, even with `--confirm-staging-write`.
+- `PATHOS_ENV=Stage` is intentionally blocked for write mode, even with `--confirm-staging-write`.
+- `PATHOS_ENV=" stage "` is intentionally blocked for write mode, even with `--confirm-staging-write`.
+- `PATHOS_ENV=STAGING` and `PATHOS_ENV=" staging "` resolve to `staging` and are allowed with `--confirm-staging-write`.
+- Config aliases do not expand staging validation write permissions.
+
+### Patch Artifacts
+```text
+artifacts/day-47-usajobs-sync-safety-gates.patch - 360763 bytes
+artifacts/day-47-usajobs-sync-safety-gates-this-run.patch - 255254 bytes
+```
+
+### Remaining Known Blockers
+- Day 48: real alert/indexing queue rows with dedupe remain out of scope for this patch.
+- Day 49: canonical USAJOBS normalization hardening remains out of scope for this patch.
+- Day 50+: lifecycle guards, ops health endpoint tests, schema hardening, full pytest runtime triage, and actual staging dry-run/write/repeat validation remain.
+
+### Merge Readiness
+- Day 47 slice after this alias-leak patch: merge-ready, pending human review of the final diff and artifacts.
+- Overall USAJOBS production readiness remains not merge-ready until Day 48+ work is complete.
+
+## 2026-07-01 - Day 47 Commit Preparation
+
+### Branch
+```text
+feature/voloro-day-47-usajobs-sync-safety-gates
+```
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-47-usajobs-sync-safety-gates with intended Day 47 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and are intentionally excluded from the Day 47 commit.
+
+git branch --show-current
+Result: feature/voloro-day-47-usajobs-sync-safety-gates
+
+git diff --name-status develop...HEAD
+Result: 35 cumulative backend files changed from develop through the current branch lineage. The Day 47 commit scope remains limited to the backend dry-run safety, staging validation CLI, tests, docs, merge notes, and Day 47 artifacts.
+
+git diff --stat develop...HEAD
+Result: 35 files changed, 6909 insertions(+), 145 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 225 source files.
+
+poetry run pytest tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 23 passed in 5.90s.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py -q --cov=app --cov-fail-under=0
+Result: passed, 17 passed in 11.56s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 328 tests in 9.11s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-47-usajobs-sync-safety-gates.patch - 356899 bytes
+artifacts/day-47-usajobs-sync-safety-gates-this-run.patch - 251600 bytes
+```
+
+### Merge Readiness
+- Final Day 47 verdict: merge-ready for the dry-run safety and staging write-gate slice only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 48+ work is complete.
+
+### Remaining Day 48+ Blockers
+- Real alert/indexing queue rows with dedupe.
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+## 2026-07-01 - Day 48 USAJOBS Sync Event Queues
+
+### Branch
+```text
+feature/voloro-day-48-usajobs-sync-event-queues
+```
+
+### Summary
+- Added durable queue-only rows for USAJOBS sync alert and indexing events.
+- Added `job_alert_events` and `job_page_indexing_events` with unique `dedupe_key` values and indexes by sync run, status, event type, job id, and saved search id.
+- Updated USAJOBS ingestion so new and updated jobs queue `URL_UPDATED` indexing events and saved-search alert events.
+- Updated close-missing handling so closed jobs queue `URL_DELETED` indexing events and closed-job alert events.
+- `job_sync_runs.alert_events_queued` and `job_sync_runs.indexing_events_queued` now count newly inserted queue rows for that run; deduped repeats do not inflate counters.
+- External delivery remains disabled: no email send, no Google Indexing API submission, no IndexNow submission, no scheduler change, and no scraping.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-48-usajobs-sync-event-queues with Day 48 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-48-usajobs-sync-event-queues
+
+git diff --name-status develop...HEAD
+Result: 39 cumulative backend files changed from develop through the current branch lineage. This includes the committed Day 47 baseline plus existing USAJOBS staging-validation lineage; Day 48 working-tree files add the queue migration, queue repo, ingestion queue wiring, docs, and tests.
+
+git diff --stat develop...HEAD
+Result: 39 files changed, 21549 insertions(+), 149 deletions(-)
+
+git diff --stat
+Result: 17 files changed, 4929 insertions(+), 555 deletions(-). This includes Day 48 backend files plus unrelated dirty frontend files in the wider worktree; frontend files are not part of Day 48.
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 226 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 26 passed, 1 skipped in 23.67s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 329 tests in 12.28s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-48.patch - 1018273 bytes
+artifacts/day-48-this-run.patch - 249255 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API fetch -> ingestion write outcome -> deduped `job_alert_events`/`job_page_indexing_events` queue rows -> `job_sync_runs` counters updated from inserted row counts |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Queue rows missing or duplicated would make staging alert/indexing validation unauditable and could inflate operator health counters |
+| How tested | Automated pytest for new/updated/closed queue events, repeat-run dedupe, dry-run suppression, no legacy alert delivery rows, and migration creation |
+
+### Remaining Day 49+ Blockers
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+### Merge Readiness
+- Day 48 slice: implementation complete and locally validated; ready for code review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 49+ work is complete.
+
+## 2026-07-01 - Day 48 Must-Fix: Indexing Dedupe Scope
+
+### Summary
+- Patched the Day 48 queue identity split so alert events remain saved-search-scoped while page indexing events are job/page/content-scoped.
+- `saved_search_id` is no longer part of the indexing dedupe identity. It may remain on the first inserted indexing row only as provenance.
+- Two saved searches matching the same USAJOBS job/content now create two alert rows and one indexing row.
+- Repeat unchanged syncs do not duplicate alert or indexing queue rows and do not inflate queue counters.
+- Added direct queue repo tests for `ON CONFLICT(dedupe_key) DO NOTHING` behavior and migration-runner assertions for queue dedupe uniqueness and operational indexes.
+- Counter atomicity was deferred to Day 52 schema/transaction hardening rather than broadening this must-fix patch.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-48-usajobs-sync-event-queues with Day 48 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-48-usajobs-sync-event-queues
+
+git diff --name-status develop...HEAD
+Result: 39 cumulative backend files changed from develop through the current branch lineage. This includes committed Day 47 and prior USAJOBS staging-validation lineage; Day 48 working-tree queue files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 39 files changed, 21549 insertions(+), 149 deletions(-)
+
+git diff --name-status
+Result: Day 48 backend queue files changed/new, including the new queue migrations, `USAJobsSyncEventRepo`, ingestion service queue wiring, Day 48 docs, migration tests, ingestion tests, and `tests/db/repo/test_usajobs_sync_event_repo.py`. Unrelated frontend dirty files are also present in the wider worktree and are not part of Day 48.
+
+git diff --stat
+Result: 19 files changed, 5267 insertions(+), 557 deletions(-). This includes Day 48 backend files plus unrelated dirty frontend files in the wider worktree; frontend files are not part of Day 48.
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 27 passed, 1 skipped in 26.14s.
+
+poetry run pytest tests/db/repo/test_usajobs_sync_event_repo.py -q --cov=app --cov-fail-under=0
+Result: passed, 2 passed in 8.30s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 332 tests in 9.57s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-48.patch - 1018273 bytes
+artifacts/day-48-this-run.patch - 265040 bytes
+```
+
+### Remaining Day 49+ Blockers
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening, including queue counter atomicity/transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+### Merge Readiness
+- Day 48 must-fix verdict: merge-ready for the queue event and dedupe slice after this patch.
+- Overall USAJOBS production readiness remains not merge-ready until Day 49+ work is complete.
+
+## 2026-07-01 - Day 48 Final Commit Readiness
+
+### Summary
+- Final pre-commit validation completed for Day 48 USAJOBS sync event queues.
+- Day 48 remains merge-ready for the queue persistence and dedupe slice only.
+- Overall USAJOBS production readiness remains blocked by Day 49+ work.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-48-usajobs-sync-event-queues with Day 48 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not staged.
+
+git branch --show-current
+Result: feature/voloro-day-48-usajobs-sync-event-queues
+
+git diff --name-status develop...HEAD
+Result: 39 cumulative backend files changed from develop through the current branch lineage. This includes committed Day 47 and prior USAJOBS staging-validation lineage; Day 48 working-tree queue files are captured in the Day 48 artifacts.
+
+git diff --stat develop...HEAD
+Result: 39 files changed, 21549 insertions(+), 149 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 29 passed, 1 skipped in 27.61s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 332 tests in 9.45s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-48.patch - 1018273 bytes
+artifacts/day-48-this-run.patch - 267525 bytes
+```
+
+### Remaining Day 49+ Blockers
+- Canonical USAJOBS normalization hardening.
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening, including counter atomicity and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+
+### Final Day 48 Verdict
+- Day 48 queue persistence and dedupe slice: merge-ready.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+## 2026-07-01 - Day 49 USAJOBS Canonical Normalization
+
+### Branch
+```text
+feature/voloro-day-49-usajobs-canonical-normalization
+```
+
+### Summary
+- Hardened USAJOBS canonical normalization so production ingestion now carries real fields from official USAJOBS Search API-shaped payloads.
+- Added canonical fields for source job id, announcement number, agency, department, series, pay plan, remote status, telework status, source URL, documents, qualifications, duties, who-may-apply, hiring path, and status.
+- Kept telework separate from fully remote classification. Telework eligibility and location-negotiable text do not become fully remote jobs.
+- Preserved official USAJOBS apply and source links.
+- Added real fixture coverage for canonical normalization, hash stability, persisted canonical JSON, normalized-field change logs, queue compatibility, and dry-run suppression.
+- External delivery remains disabled: no email send, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-49-usajobs-canonical-normalization with Day 49 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-49-usajobs-canonical-normalization
+
+git diff --name-status develop...HEAD
+Result: 47 cumulative backend files changed from develop through the current committed branch lineage. Because Day 49 is intentionally uncommitted, the Day 49 working-tree files are captured in the this-run artifact and working-tree diff, not in develop...HEAD.
+
+git diff --stat develop...HEAD
+Result: 47 files changed, 51477 insertions(+), 149 deletions(-)
+
+git diff --name-status
+Result: Day 49 backend working-tree files changed/new include:
+M apps/pathos-platform/backend/app/adapters/usajobs/models.py
+M apps/pathos-platform/backend/app/adapters/usajobs/normalize.py
+M apps/pathos-platform/backend/app/db/repo/saved_search_ingested_job_repo.py
+M apps/pathos-platform/backend/app/domain/jobs/canonical_models.py
+M apps/pathos-platform/backend/app/services/job_search_service.py
+M apps/pathos-platform/backend/app/services/usajobs_ingestion_service.py
+A apps/pathos-platform/backend/docs/change-briefs/day-49-usajobs-canonical-normalization.md
+M apps/pathos-platform/backend/docs/merge-notes/current.md
+M apps/pathos-platform/backend/docs/roadmaps/usajobs-sync-production-readiness-days.md
+M apps/pathos-platform/backend/docs/runbook/usajobs-sync-staging-validation.md
+M apps/pathos-platform/backend/tests/api/jobs/test__positive__normalize.py
+A apps/pathos-platform/backend/tests/fixtures/usajobs_search_day49_canonical.json
+M apps/pathos-platform/backend/tests/services/test_usajobs_ingestion_service.py
+
+git diff --stat
+Result: backend Day 49 files plus unrelated dirty frontend files are present in the wider worktree. Backend Day 49 scope is limited to USAJOBS adapter/domain/service/repo tests/docs/fixtures.
+```
+
+### Validation Commands
+```text
+poetry run ruff check app/adapters/usajobs/normalize.py app/services/usajobs_ingestion_service.py tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py
+Result: passed, All checks passed!
+
+poetry run mypy app/adapters/usajobs app/domain/jobs app/db/repo/saved_search_ingested_job_repo.py app/services/usajobs_ingestion_service.py app/services/job_search_service.py tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py
+Result: passed, Success: no issues found in 14 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 39 passed, 1 skipped in 35.73s.
+
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 339 tests in 11.16s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Notes On Validation
+- An initial parallel pytest attempt hit a Windows `.coverage` file permission collision before one command could start; the affected test slice was rerun by itself and passed.
+- Full pytest execution was not run for Day 49 because this prompt explicitly scoped validation to targeted tests and collect-only while preserving the existing full-suite timeout triage for Day 53.
+
+### Patch Artifacts
+```text
+artifacts/day-49-usajobs-canonical-normalization.patch - 2381853 bytes
+artifacts/day-49-usajobs-canonical-normalization-this-run.patch - 256606 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API-shaped payload -> adapter model validation -> canonical normalizer -> job search execution result -> ingestion persistence/change log -> Day 48 queue rows |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Canonical jobs could miss trust-critical fields, misclassify telework as remote, miss meaningful content changes, or queue events from incomplete canonical content |
+| How tested | Automated pytest for real-shaped fixture normalization, remote/telework separation, hash stability, persisted canonical JSON, normalized-field change logs, queue compatibility, and dry-run suppression |
+
+### Remaining Day 50+ Blockers
+- Lifecycle guards.
+- Ops health tests.
+- Schema hardening, including counter atomicity and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract alignment.
+- Production rollout readiness.
+
+### Merge Readiness
+- Day 49 canonical normalization slice: merge-ready for review after local validation.
+- Overall USAJOBS production readiness remains not merge-ready until Day 50+ work is complete.
+
+## 2026-07-01 - Day 49 Final Commit Readiness
+
+### Summary
+- Final pre-commit validation completed for Day 49 USAJOBS canonical normalization.
+- Day 49 remains merge-ready for the canonical normalization slice only.
+- Overall USAJOBS production readiness remains blocked by Day 50+ work.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-49-usajobs-canonical-normalization with Day 49 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and must not be staged.
+
+git branch --show-current
+Result: feature/voloro-day-49-usajobs-canonical-normalization
+
+git diff --name-status develop...HEAD
+Result: 47 cumulative backend files changed from develop through the current committed branch lineage. Day 49 working-tree changes are captured in the Day 49 this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 47 files changed, 51477 insertions(+), 149 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 39 passed, 1 skipped in 46.33s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 339 tests in 17.06s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-49-usajobs-canonical-normalization.patch - 2381853 bytes
+artifacts/day-49-usajobs-canonical-normalization-this-run.patch - 253403 bytes
+```
+
+### Day 49 Follow-ups
+- Add telework negative phrase handling later so text like "telework not available" does not become telework eligible.
+- Decide and document whether `source.mapper_version` should force canonical hash changes and re-indexing; exclude it in a later hardening slice if not.
+- Add an explicit JSON key-order hash stability test.
+
+### Remaining Day 50+ Blockers
+- Lifecycle close-missing guards.
+- Ops health tests.
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+
+### Final Day 49 Verdict
+- Day 49 canonical normalization slice: merge-ready.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+## 2026-07-01 - Day 50 USAJOBS Lifecycle Guards
+
+### Branch
+```text
+feature/voloro-day-50-usajobs-lifecycle-guards
+```
+
+### Summary
+- Added a close-missing guard so missing jobs are closed only when close-missing is explicitly enabled and the caller proves partition completeness with a stable partition identity.
+- Partial pagination, dry-run, bounded staging validation, missing partition identity, max-page/max-record truncation, and failed partitions do not close jobs.
+- Added deterministic lifecycle behavior for complete partition closure, reappeared jobs, and expired close dates.
+- Staging CLI output now states that bounded validation runs with `close_missing: false` and `partition_complete_for_close_missing: false`.
+- Day 47 dry-run safety, Day 48 queue-only dedupe, and Day 49 canonical normalization remain in place; no external delivery, scheduler changes, or scraping were added.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-50-usajobs-lifecycle-guards with Day 50 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-50-usajobs-lifecycle-guards
+
+git diff --name-status develop...HEAD
+Result: 53 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, and prior USAJOBS staging-validation lineage; Day 50 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 53 files changed, 111047 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 61 passed, 1 skipped in 56.46s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 345 tests in 11.57s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-50-usajobs-lifecycle-guards.patch - 5126471 bytes
+artifacts/day-50-usajobs-lifecycle-guards-this-run.patch - 242927 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | Official USAJOBS API-shaped payload -> job search execution result -> ingestion lifecycle guard -> persisted canonical row/change log -> Day 48 queue rows when writes are allowed |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | A partial or failed bounded sync could falsely close healthy USAJOBS jobs, or a reappeared/expired job could have an incorrect lifecycle state |
+| How tested | Automated pytest for partial no-close, failed no-close, dry-run no-close, complete close, reappeared reopen, expired close date, staging CLI no-close defaults, queue dedupe compatibility, and migration coverage |
+
+### Remaining Day 51+ Blockers
+- Day 51 ops health tests.
+- Day 52 schema and transaction hardening.
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+
+### Merge Readiness
+- Day 50 lifecycle guard slice: implemented and locally validated; ready for code review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 51+ work is complete.
+
+## 2026-07-01 - Day 50 Final Commit Readiness
+
+### Summary
+- Final pre-commit validation completed for Day 50 USAJOBS lifecycle close-missing guards.
+- Day 50 remains merge-ready for the lifecycle guard slice only.
+- Overall USAJOBS production readiness remains blocked by Day 51+ work.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-50-usajobs-lifecycle-guards with Day 50 backend files modified/new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and must not be staged.
+
+git branch --show-current
+Result: feature/voloro-day-50-usajobs-lifecycle-guards
+
+git diff --name-status develop...HEAD
+Result: 53 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, and prior USAJOBS staging-validation lineage; Day 50 working-tree files are captured in the Day 50 artifacts before commit.
+
+git diff --stat develop...HEAD
+Result: 53 files changed, 111047 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 227 source files.
+
+poetry run pytest tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/api/jobs/test__positive__normalize.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 68 passed, 1 skipped in 44.48s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 345 tests in 9.43s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+artifacts/day-50-usajobs-lifecycle-guards.patch - 5126471 bytes
+artifacts/day-50-usajobs-lifecycle-guards-this-run.patch - 239409 bytes
+```
+
+### Day 50 Follow-ups
+- Add direct tests for `max_pages_reached` and `max_records_reached` close-missing skip reasons.
+- Harden lifecycle date parsing so malformed non-ISO `close_date` values fail open explicitly.
+- Decide expired-new queue semantics before external delivery is enabled.
+- Add repeat-run assertions for complete-close and reappeared-job idempotency.
+- Preserve Day 49 follow-ups: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+
+### Remaining Day 51+ Blockers
+- Ops health tests.
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+
+### Final Day 50 Verdict
+- Day 50 lifecycle close-missing guard slice: merge-ready.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+## 2026-07-01 - Day 51 USAJOBS Sync Ops Health Endpoint
+
+### Summary
+- Added direct tests for `/api/v1/ops/usajobs-sync/health` auth, no-row, healthy, stale, degraded, failed, queue counter, lifecycle visibility, and sanitization behavior.
+- Hardened the health payload returned by `JobSyncRunRepo.latest_health()` with operator-facing status labels and sanitized error/partition summaries.
+- Added a non-technical Day 51 change brief and updated the staging runbook and production-readiness roadmap.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched for Day 51.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 63 passed, 1 skipped in 51.59s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 351 tests in 12.46s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 227234 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | `job_sync_runs` rows -> `JobSyncRunRepo.latest_health()` sanitizes and labels health -> `/api/v1/ops/usajobs-sync/health` returns API-key-protected operator payload |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Ops health could leak secrets/raw provider data/stack traces or mislead operators about failed, stale, degraded, or close-missing-skipped sync state |
+| How tested | Automated endpoint pytest for auth rejection/success, never-run response, healthy response, stale close-missing skip, degraded success with failed partitions, failed response, queue counters, last-success timing, and secret/error sanitization |
+
+### Day 51 Follow-ups
+- Broaden ops health tests later if Day 52 schema/transaction hardening changes sync-run persistence semantics.
+- Keep endpoint payloads summary-only; do not add raw upstream payloads, provider headers, credentials, or stack traces.
+
+### Remaining Day 52+ Blockers
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 51 ops health endpoint slice: implemented and locally validated; ready for code review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 52+ work is complete.
+
+## 2026-07-01 - Day 51 Sanitizer Must-Fix Patch
+
+### Summary
+- Patched the USAJOBS ops health sanitizer so free-text error summaries fully redact Authorization-style credentials using Bearer, Basic, Token, and API-key style schemes.
+- Redacted stringified provider header dictionaries such as `headers={...}` before individual header values can leak.
+- Added safe malformed partition JSON handling so the health endpoint returns a degraded summary instead of a 500 or raw storage content.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched for this patch.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 65 passed, 1 skipped in 57.93s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 353 tests in 9.82s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 238234 bytes
+```
+
+### Must-Fix Resolution
+- Authorization schemes are covered: Bearer, Basic, Token, API-key style schemes, and lowercase `authorization` values are redacted.
+- Stringified provider headers are covered: `headers={...}` expressions are replaced with redacted summaries.
+- API key patterns, database URLs, credential-bearing URLs, emails, raw payload fields, and stack frames remain redacted.
+- Malformed partition JSON handling was fixed in the health endpoint path; malformed partition summaries now produce a safe degraded response with `malformed_failed_partitions_json` or `malformed_stale_partitions_json`.
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | `job_sync_runs.error_summary` and partition JSON -> `JobSyncRunRepo.latest_health()` sanitizer/decoder -> `/api/v1/ops/usajobs-sync/health` returns safe operator payload |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Free-text upstream errors could leak auth tokens/header dictionaries, or malformed partition JSON could break the health endpoint |
+| How tested | Endpoint pytest covers Authorization Basic/Token/Bearer/lowercase auth, stringified provider headers, API keys, credential-bearing URLs, DB URLs, stack frames, and malformed partition JSON |
+
+### Remaining Day 52+ Blockers
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 51 ops health sanitizer must-fix patch: locally validated and ready for final review.
+- Overall USAJOBS production readiness remains not merge-ready until Day 52+ work is complete.
+
+## 2026-07-01 - Day 51 Authorization Trailing-Fragment Must-Fix Patch
+
+### Summary
+- Patched the USAJOBS ops health sanitizer so free-text `Authorization` expressions redact the full value, including unknown, quoted, and multi-token forms.
+- Added endpoint-level regression coverage for trailing Authorization fragments, quoted authorization values, and malformed `stale_partitions_json`.
+- Updated the Day 51 change brief, staging runbook, and production-readiness roadmap to document full Authorization redaction and malformed stale partition handling.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched for this patch.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 66 passed, 1 skipped in 53.61s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 354 tests in 10.10s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 249065 bytes
+```
+
+### Must-Fix Resolution
+- Full Authorization free-text values with trailing fragments are now covered: `Authorization: anything with spaces`, lowercase `authorization: anything with spaces`, `Authorization = anything with spaces`, and quoted authorization values redact to a safe marker without leaking trailing words.
+- Existing Authorization Basic, Token, Bearer, stringified provider headers, API-key patterns, credential-bearing URLs, database URLs, and stack-frame redaction remain covered.
+- Malformed `stale_partitions_json` was fixed and now returns a safe degraded health response with `malformed_stale_partitions_json` instead of crashing or exposing raw storage content.
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | `job_sync_runs.error_summary` and partition JSON -> `JobSyncRunRepo.latest_health()` sanitizer/decoder -> `/api/v1/ops/usajobs-sync/health` returns safe operator payload |
+| Store(s) | None |
+| Storage key(s) | None |
+| Failure mode | Multi-token Authorization values could leak trailing credential fragments, or malformed stale partition JSON could mislead or break the health endpoint |
+| How tested | Endpoint pytest covers unknown and multi-token Authorization strings, quoted authorization values, Authorization Basic/Token/Bearer, stringified provider headers, API keys, credential-bearing URLs, DB URLs, stack frames, malformed failed partitions, and malformed stale partitions |
+
+### Remaining Day 52+ Blockers
+- Schema and transaction hardening.
+- Full pytest runtime triage.
+- Actual staging dry-run/write/repeat validation.
+- Public job page sync contract.
+- Production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 51 ops health sanitizer trailing-fragment must-fix patch: locally validated and merge-ready for Day 51 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 52+ work is complete.
+
+## 2026-07-01 - Day 51 Commit And Push Validation
+
+### Summary
+- Re-ran the final Day 51 validation set before committing.
+- Regenerated Day 51 patch artifacts using PowerShell.
+- Confirmed the slice remains scoped to ops health endpoint tests, sanitizer hardening, malformed partition JSON safety, docs, merge notes, and artifacts.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-51-usajobs-sync-ops-health with Day 51 backend repo/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not staged.
+
+git branch --show-current
+Result: feature/voloro-day-51-usajobs-sync-ops-health
+
+git diff --name-status develop...HEAD
+Result: 56 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, and prior USAJOBS staging-validation lineage; Day 51 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 56 files changed, 229459 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/v1/test_ops.py tests/services/test_usajobs_ingestion_service.py tests/db/repo/test_usajobs_sync_event_repo.py tests/scripts/test_usajobs_staging_validation_cli.py tests/test_alembic_migrations.py tests/test_migrations_runner.py -q --cov=app --cov-fail-under=0
+Result: passed, 66 passed, 1 skipped in 54.24s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 354 tests in 9.59s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-51.patch, artifacts/day-51-this-run.patch | Select-Object Name, Length
+artifacts/day-51.patch - 10640403 bytes
+artifacts/day-51-this-run.patch - 245548 bytes
+```
+
+### Final Day 51 Verdict
+- Day 51 ops health endpoint hardening: merge-ready for Day 51 only.
+- Sanitizer coverage includes Authorization Basic, Token, Bearer, lowercase, equals-form, quoted, and multi-token unknown values; stringified provider headers; API keys; DB URLs; credential-bearing URLs; stack frames; and raw sensitive detail suppression.
+- Malformed failed and stale partition JSON return safe degraded health output instead of crashing or exposing raw stored JSON.
+- External delivery remains disabled: no email, no Google Indexing API, no IndexNow, no production scheduler change, and no scraping.
+
+### Remaining Day 52+ Blockers
+- Day 52 schema and transaction hardening.
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+## 2026-07-01 - Day 52 Schema And Transaction Hardening
+
+### Summary
+- Added Day 52 SQL and Alembic migrations for operational indexes used by USAJOBS sync health, lifecycle, queue, and change-log paths.
+- Preserved database-enforced queue dedupe through unique `dedupe_key` behavior and added repo hardening so invalid queue names are rejected instead of silently routed.
+- Tightened the queue transaction boundary so sync-run creation, queue row insertion, and queue counter updates commit together for the queue phase.
+- Deferred deeper table-rebuild constraints, including a retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints, because those need a dedicated schema rebuild review.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-52-usajobs-sync-schema-hardening with Day 52 backend repo/service/migration/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-52-usajobs-sync-schema-hardening
+
+git diff --name-status develop...HEAD
+Result: 60 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, Day 51, and prior USAJOBS staging-validation lineage; Day 52 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 60 files changed, 466918 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 74 passed, 1 skipped in 54.12s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 358 tests in 9.21s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-52-usajobs-sync-schema-hardening.patch, artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch | Select-Object Name, Length
+artifacts/day-52-usajobs-sync-schema-hardening.patch - 21811304 bytes
+artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 233181 bytes
+```
+
+### AI Acceptance Checklist
+| Item | Value |
+|------|-------|
+| Flow | USAJOBS write sync -> `JobSyncRunRepo.create` + queue inserts + `JobSyncRunRepo.update_event_counts` run in one queue-phase transaction |
+| Store(s) | `job_sync_runs`, `job_alert_events`, `job_page_indexing_events`, `job_change_log`, `saved_search_ingested_jobs` |
+| Storage key(s) | queue `dedupe_key`; `job_change_log.sync_run_id`; lifecycle/status indexes |
+| Failure mode | Queue rows and sync-run queue counters could drift if insertion or counter update failed partway through |
+| How tested | Migration index assertions, Alembic downgrade assertion, invalid queue-name repo test, queue insertion rollback test, and counter-update rollback test |
+
+### Remaining Day 53+ Blockers
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups: retroactive `job_change_log.sync_run_id` foreign key, CHECK constraints for existing status/event/lifecycle fields, and broader canonical job/change-log transaction boundaries.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 52 schema and transaction hardening: locally validated and merge-ready for Day 52 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 53+ work is complete.
+
+## 2026-07-01 - Day 52 Transaction Consistency Must-Fix Patch
+
+### Summary
+- Patched the Day 52 review blocker: canonical job upserts, lifecycle changes, `job_change_log` rows, sync-run creation, queue row insertion, and queue counter updates now share one non-dry-run write transaction.
+- Queue insertion failure and counter update failure now roll back canonical rows and change-log rows along with sync-run and queue rows.
+- Close-missing lifecycle changes and reappeared-job reopening also roll back with the same transaction if the write phase fails before commit.
+- Added retry-after-rollback assertions so a failed write can be rerun and still create the expected canonical job, change log, and queue events.
+- Expanded Alembic downgrade coverage to assert all seven Day 52 indexes are removed, not just representative indexes.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-52-usajobs-sync-schema-hardening with Day 52 backend repo/service/migration/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-52-usajobs-sync-schema-hardening
+
+git diff --name-status develop...HEAD
+Result: 60 cumulative backend files changed from develop through the current committed branch lineage. This includes committed Day 47, Day 48, Day 49, Day 50, Day 51, and prior USAJOBS staging-validation lineage; Day 52 working-tree files are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 60 files changed, 466918 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 76 passed, 1 skipped in 62.67s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 360 tests in 11.11s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-52-usajobs-sync-schema-hardening.patch, artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch | Select-Object Name, Length
+artifacts/day-52-usajobs-sync-schema-hardening.patch - 21811304 bytes
+artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 276702 bytes
+```
+
+### Must-Fix Resolution
+- Canonical job and `job_change_log` writes are now included in the Day 52 write consistency boundary.
+- Queue/counter failures no longer leave canonical rows, change logs, lifecycle changes, sync-run rows, or queue rows behind.
+- Close-missing rollback keeps the missing job open, keeps `closed_at` empty, avoids closed change logs, and avoids `URL_DELETED` queue rows.
+- Reappeared-job rollback keeps the job closed, preserves `closed_at`, avoids reopened change logs, and avoids new `URL_UPDATED` queue rows.
+- Retry after rollback creates the expected canonical rows and queue events.
+- All seven Day 52 downgrade index assertions were added.
+
+### Remaining Day 53+ Blockers
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+## 2026-07-01 - Day 53 Backend Pytest Runtime Triage
+
+### Summary
+- Investigated the backend full-suite timeout without changing USAJOBS sync business logic.
+- Isolated the issue to cumulative backend suite runtime plus stale test isolation/contract assumptions, not live USAJOBS calls and not a single hanging sync path.
+- Applied narrow test/runtime fixes: isolated intelligence contract tests to temporary databases, moved the worker scheduler flags test off a fixed stale `/tmp` database, updated the job-search integration contract for Day 49 canonical fields, and refreshed the OpenAPI snapshot.
+- Full-suite commands complete when allowed enough time: final validation took about 9-12 minutes depending on coverage mode on this workstation.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-53-backend-pytest-runtime-triage with Day 53 backend test/docs/artifact changes. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and were not touched.
+
+git branch --show-current
+Result: feature/voloro-day-53-backend-pytest-runtime-triage
+
+git diff --name-status develop...HEAD
+Result: 65 cumulative backend files changed from develop through the committed Day 47-Day 52 lineage. Day 53 working-tree changes are captured in the this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 65 files changed, 942458 insertions(+), 151 deletions(-)
+```
+
+### Collection Baseline
+```text
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 360 tests in 20.60s. Pytest printed the expected collect-only coverage warning because collect-only does not execute tests.
+```
+
+### Directory-Slice Results
+```text
+poetry run pytest tests/api --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 90 passed in 121.45s.
+
+poetry run pytest tests/services --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 48 passed in 43.14s.
+
+poetry run pytest tests/db --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 16 passed, 8 skipped in 18.55s.
+
+poetry run pytest tests/scripts --no-cov -vv --durations=20 --maxfail=1
+Result: passed, 23 passed in 2.49s.
+
+tests/workers
+Result: skipped because the directory does not exist.
+
+poetry run pytest tests/integration --no-cov -vv --durations=20 --maxfail=1
+Initial result: failed on a stale job-search response-shape assertion from before Day 49 canonical fields.
+Final result after narrow test fix: passed, 1 passed in 11.38s.
+
+Additional top-level directories
+Result: adapters 2 passed; boundary 2 passed; contract 3 passed; edge_case 2 passed; integrity 1 passed; misuse_case 2 passed; negative 2 passed; positive 2 passed; use_case 2 passed.
+
+Root-level test files
+Initial result: exposed stale local database assumptions and a stale OpenAPI snapshot.
+Final result after narrow fixes: passed, 154 passed, 2 skipped in 223.98s.
+```
+
+### Narrowed Root Cause
+- The timeout source was not a live USAJOBS or external network call.
+- Coverage was not the cause; the final coverage run completed faster than the final no-coverage run on this machine.
+- The old 244-248 second timeout budget was too short for the current backend suite. `tests/api` alone takes about two minutes, and root-level tests take nearly four minutes.
+- Stale failures that had been hidden behind timeout attempts were fixed in tests only: job-search canonical response shape, isolated test database setup, fixed worker test database path, and the OpenAPI golden artifact.
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -vv --cov=app --cov-fail-under=0 --maxfail=1 --durations=20
+Result: passed, 76 passed, 1 skipped in 110.78s.
+
+poetry run pytest --no-cov -q --maxfail=1
+Result: passed, 350 passed, 10 skipped in 525.81s.
+
+poetry run pytest -q --maxfail=1
+Result: passed, 350 passed, 10 skipped in 697.03s. Coverage total was 91.19%, above the configured 90% threshold.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-53-backend-pytest-runtime-triage.patch, artifacts/day-53-backend-pytest-runtime-triage-this-run.patch | Select-Object Name, Length
+artifacts/day-53-backend-pytest-runtime-triage.patch - 44420412 bytes
+artifacts/day-53-backend-pytest-runtime-triage-this-run.patch - 215736 bytes
+```
+
+### Remaining Day 54+ Blockers
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 53 runtime triage: locally validated and merge-ready for Day 53 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 54+ work is complete.
+
+## 2026-07-01 - Day 54 USAJOBS Staging Validation Run
+
+### Summary
+- Created branch `feature/voloro-day-54-usajobs-staging-validation-run` from Day 53.
+- Read the runbook and staging CLI safety gates.
+- Confirmed the CLI write gate requires explicit safe `PATHOS_ENV` plus `--confirm-staging-write`, max pages are bounded to 1-2, and staging validation keeps `close_missing` false.
+- Loaded the USAJOBS env file silently; only presence and redacted safety information was logged.
+- Fixed the staging validation script entrypoint so the runbook command imports `app` without requiring pre-set `PYTHONPATH`.
+- Diagnosed the `JobSearchUpstreamSchemaError` with a redacted live-shape probe that printed only keys, types, counts, and validation locations.
+- Fixed the schema issue by accepting official USAJOBS `WhoMayApply` code/name objects and `HiringPath` string lists, then normalizing them to canonical strings.
+- Reran the bounded dry-run against the official USAJOBS API path. It succeeded and previewed 19 jobs.
+- Verified dry-run zero-write by comparing durable app row counts before and after the successful dry-run.
+- Did not run limited write, repeat write, persisted-row verification, or health endpoint verification because the environment did not explicitly prove staging runtime/database targeting.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-54-usajobs-staging-validation-run with unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 dirty/untracked in the wider worktree. Backend Day 54 docs/test/script changes are this branch's working-tree changes.
+
+git branch --show-current
+Result: feature/voloro-day-54-usajobs-staging-validation-run
+
+git diff --name-status develop...HEAD
+Result: 71 cumulative backend files changed from develop through the committed Day 47-Day 53 branch lineage. Day 54 working-tree changes are captured in the this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 71 files changed, 1891444 insertions(+), 160 deletions(-)
+```
+
+### Staging Environment Safety Confirmation
+```text
+Env file: present, loaded without printing contents.
+USAJOBS_API_KEY: present.
+USAJOBS_USER_AGENT: present.
+PATHOS_ENV explicit process value: missing.
+Resolved runtime env: local.
+Database dialect: sqlite.
+Database target: present but redacted.
+Database target production-token check: false.
+Database target explicit staging proof: not proven.
+Required sync tables in target: saved_search_ingested_jobs/job_alert_events/job_page_indexing_events present; job_sync_runs/job_change_log missing.
+PATHOS_API_KEYS: missing.
+Google Indexing credential envs: absent.
+IndexNow credential envs: absent.
+ALERTS_DELIVERY_ENABLED resolved default: true; dry-run command explicitly set it false.
+Write-mode safety verdict: blocked before write because explicit staging runtime/database targeting was not proven.
+```
+
+### Schema Error Root Cause And Fix
+```text
+Root cause: live official USAJOBS Search API records can provide UserArea.Details.WhoMayApply as a Code/Name object and UserArea.Details.HiringPath as a list of strings.
+Previous model expectation: WhoMayApply as string/list of strings and HiringPath as list of Code/Name objects.
+Fix: adapter models now accept those official shapes, and normalization converts them into stable canonical who_may_apply and hiring_path string lists.
+Regression test: added a sanitized live-shaped fixture case covering WhoMayApply Code/Name object and HiringPath string list.
+Raw payloads, headers, API keys, and user-agent values were not logged.
+```
+
+### Dry-Run Result
+```text
+Command shape:
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+
+Result: exit code 0.
+records_fetched: 19
+new_jobs: 19
+updated_jobs: 0
+closed_jobs: 0
+alert_events_queued: 0
+indexing_events_queued: 0
+sync_run_ids: []
+close_missing: false
+partition_complete_for_close_missing: false
+failed_partitions: 0
+error_summary: none
+```
+
+### Dry-Run Zero-Write Verification
+```text
+Counts before dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Counts after dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Result: zero durable app rows changed during the successful dry-run.
+```
+
+### Write, Repeat, Health, And External Delivery Verification
+- First limited write: not run because staging targeting was not proven.
+- Repeat write/idempotency check: not run because the first write was intentionally blocked.
+- Persisted row verification: no new rows existed to verify beyond dry-run zero-write counts.
+- Health endpoint verification: not run because no staging write sync_run was created and `PATHOS_API_KEYS` was not configured.
+- External delivery/indexing verification: no write or worker delivery command was run; queue row counts stayed zero, Google Indexing and IndexNow credential envs were absent, and no scraping was performed.
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py -q --cov=app --cov-fail-under=0
+Result: passed, 8 passed in 7.36s.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 77 passed, 1 skipped in 86.24s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 362 tests in 12.84s. The coverage plugin printed the expected collect-only coverage warning because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-54-usajobs-staging-validation-run.patch, artifacts/day-54-usajobs-staging-validation-run-this-run.patch | Select-Object Name, Length
+artifacts/day-54-usajobs-staging-validation-run.patch - 90021364 bytes
+artifacts/day-54-usajobs-staging-validation-run-this-run.patch - 220218 bytes
+```
+
+### Remaining Day 55+ Blockers
+- Prove explicit staging runtime/database targeting, then rerun bounded write/repeat/health staging validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 54 staging validation run: not merge-ready because write-mode staging targeting was not proven, so limited write, repeat write, persisted-row checks, and health endpoint verification did not run.
+- Overall USAJOBS production readiness remains not merge-ready until write/repeat/health staging validation and Day 55+ work are complete.
+
+### Merge Readiness
+- Day 52 must-fix patch: locally validated and merge-ready for Day 52 only.
+- Overall USAJOBS production readiness remains not merge-ready until Day 53+ work is complete.
+
+## 2026-07-01 - Day 54 Staging Targeting Continuation
+
+### Summary
+- Continued Day 54 on branch `feature/voloro-day-54-usajobs-staging-validation-run`.
+- Rechecked staging proof with secrets redacted and env file contents omitted.
+- Did not run write mode because the runtime/database target still did not prove staging.
+- Reran the bounded dry-run only. It succeeded and remained zero-write.
+- Limited write, repeat-run idempotency, persisted-row checks, and health endpoint verification remain blocked until explicit staging targeting is configured.
+
+### Git Commands
+```text
+git status --short
+Result: backend Day 54 files remain modified/new; unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree.
+
+git branch --show-current
+Result: feature/voloro-day-54-usajobs-staging-validation-run
+
+git diff --name-status develop...HEAD
+Result: 71 cumulative backend files changed from develop through the committed Day 47-Day 53 branch lineage. Day 54 working-tree changes are captured in the this-run artifact.
+
+git diff --stat develop...HEAD
+Result: 71 files changed, 1891444 insertions(+), 160 deletions(-)
+```
+
+### Staging Proof Check
+```text
+Env file: present and loaded silently; contents were not printed.
+PATHOS_ENV explicit value: missing.
+Resolved runtime env: local.
+Runtime defaulted to local: true.
+Database dialect: sqlite.
+Database target: present but redacted.
+Database target production-token check: false.
+Database target staging proof: not proven.
+Required tables present: saved_search_ingested_jobs/job_alert_events/job_page_indexing_events.
+Required tables missing in target: job_sync_runs/job_change_log.
+PATHOS_API_KEYS: missing.
+USAJOBS credentials: present.
+Email delivery flag: safe/disabled.
+Google Indexing env flags: absent.
+IndexNow env flags: absent.
+Bounded partition: series 2210, Florida, last 7 days, max pages 1, page size 25.
+Write-mode Day 54 contract: not satisfied.
+Write command executed: no.
+```
+
+### Dry-Run Result
+```text
+Command shape:
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+
+Result: exit code 0.
+records_fetched: 19
+new_jobs: 19
+updated_jobs: 0
+closed_jobs: 0
+failed_partitions: 0
+sync_run_ids: []
+alert_events_queued: 0
+indexing_events_queued: 0
+close_missing: false
+partition_complete_for_close_missing: false
+runtime_env: local
+```
+
+### Dry-Run Zero-Write Verification
+```text
+Counts before dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_source_snapshots: missing_table
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Counts after dry-run:
+job_alert_events: 0
+job_change_log: missing_table
+job_page_indexing_events: 0
+job_source_snapshots: missing_table
+job_sync_runs: missing_table
+saved_search_ingested_jobs: 0
+upstream_api_audit_records: 43
+
+Result: zero durable app rows changed during dry-run.
+```
+
+### Write, Repeat, Health, And External Delivery
+- First limited write: not run because staging targeting was not proven.
+- Repeat write/idempotency check: not run because write mode was intentionally blocked.
+- Persisted row verification: not run beyond dry-run zero-write checks because no write rows were created.
+- Health endpoint verification: not run because no staging sync run was created and ops API keys were not configured.
+- External delivery/indexing verification: no write, worker delivery, email delivery, Google Indexing submission, IndexNow submission, scheduler change, or scraping occurred.
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 85 passed, 1 skipped in 66.91s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 362 tests in 10.47s. The coverage plugin printed the expected collect-only coverage warning because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-54-usajobs-staging-validation-run.patch, artifacts/day-54-usajobs-staging-validation-run-this-run.patch | Select-Object Name, Length
+artifacts/day-54-usajobs-staging-validation-run.patch - 91419940 bytes
+artifacts/day-54-usajobs-staging-validation-run-this-run.patch - 236286 bytes
+```
+
+### Remaining Day 55+ Blockers
+- Configure and prove explicit staging runtime/database targeting, then rerun bounded write/repeat/health validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.
+
+### Merge Readiness
+- Day 54 continuation: not merge-ready because staging write/repeat/health validation remains blocked by missing staging proof.
+- Overall USAJOBS production readiness remains not merge-ready until staging write/repeat/health validation and Day 55+ work are complete.
+
+## 2026-07-02 - Day 54 Blocked Checkpoint Commit Validation
+
+### Summary
+- Prepared a Day 54 checkpoint commit for `feature/voloro-day-54-usajobs-staging-validation-run`.
+- This checkpoint is explicitly not merge-ready.
+- Safe progress preserved: live official USAJOBS schema drift was fixed, bounded dry-run succeeds, and dry-run zero-write was verified.
+- Write/repeat/health validation still did not run because staging runtime/database targeting was not proven.
+- No production write, email delivery, Google Indexing API submission, IndexNow submission, scheduler change, scraping, or worker delivery activation occurred.
+
+### Latest Validation Results
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/api/jobs/test__positive__normalize.py tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 85 passed, 1 skipped in 71.22s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 362 tests in 15.16s. The coverage plugin printed the expected collect-only coverage warning because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Dry-Run And Zero-Write Status
+```text
+Latest bounded dry-run command shape:
+poetry run python scripts/usajobs_staging_validation.py --mode dry-run --series 2210 --location Florida --date-posted-days 7 --max-pages 1 --page-size 25
+
+Latest dry-run result:
+records_fetched: 19
+new_jobs: 19
+updated_jobs: 0
+closed_jobs: 0
+failed_partitions: 0
+sync_run_ids: []
+alert_events_queued: 0
+indexing_events_queued: 0
+close_missing: false
+
+Zero-write verification:
+Durable app row counts were unchanged before and after dry-run. No sync-run rows, canonical rows, change-log rows, alert queue rows, indexing queue rows, source snapshots, or upstream audit rows were created by dry-run.
+```
+
+### Explicit Blocker
+- Day 54 is not merge-ready.
+- Staging runtime/database targeting is not proven.
+- Limited write, repeat-run idempotency, persisted-row verification, and ops health endpoint verification did not run.
+
+### Required Staging Configuration Before Continuing Day 54
+- Set explicit `PATHOS_ENV=staging`.
+- Configure a proven non-production staging database target, not sqlite/local.
+- Apply the Day 52 schema/migrations in staging so `job_sync_runs`, `job_change_log`, `saved_search_ingested_jobs`, `job_alert_events`, and `job_page_indexing_events` exist.
+- Configure `PATHOS_API_KEYS` or the repo-equivalent ops API auth for health endpoint verification.
+- Provide USAJOBS credentials without logging their values.
+- Keep email delivery disabled.
+- Keep Google Indexing submission disabled.
+- Keep IndexNow submission disabled.
+- Keep `close_missing=false` for bounded staging validation.
+- Use the bounded partition only: series 2210, Florida, last 7 days, max pages 1, page size 25.
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-54-usajobs-staging-validation-run.patch, artifacts/day-54-usajobs-staging-validation-run-this-run.patch | Select-Object Name, Length
+artifacts/day-54-usajobs-staging-validation-run.patch - 91419940 bytes
+artifacts/day-54-usajobs-staging-validation-run-this-run.patch - 232307 bytes
+```
+
+### Merge Readiness
+- Day 54 checkpoint commit: safe to commit and push as a blocked checkpoint only.
+- Day 54 merge readiness: not merge-ready until real staging write/repeat/health validation is completed against a proven staging target.
+
+## 2026-07-01 - Day 52 Commit Validation
+
+### Summary
+- Final pre-commit validation was rerun for Day 52 schema and transaction hardening.
+- Canonical jobs, change logs, sync runs, queue rows, lifecycle changes, and counters share one write consistency boundary in the non-dry-run ingestion write phase.
+- Retry after rollback is covered by ingestion tests for queue failure, counter failure, close-missing rollback, and reappeared-job rollback.
+- Alembic downgrade coverage asserts all seven Day 52 indexes are removed.
+- Verdict remains merge-ready for Day 52 only.
+
+### Git Commands
+```text
+git status
+Result: branch feature/voloro-day-52-usajobs-sync-schema-hardening with Day 52 backend repo/service/migration/test/docs files modified or new. Unrelated frontend docs/UI files, restructure-safety, and usajobs-sync.env.ps1 remain dirty/untracked in the wider worktree and are intentionally not staged.
+
+git branch --show-current
+Result: feature/voloro-day-52-usajobs-sync-schema-hardening
+
+git diff --name-status develop...HEAD
+Result: 60 cumulative backend files changed from develop through the committed Day 47-Day 51 branch lineage. Day 52 working-tree changes are captured in the this-run artifact before commit.
+
+git diff --stat develop...HEAD
+Result: 60 files changed, 466918 insertions(+), 151 deletions(-)
+```
+
+### Validation Commands
+```text
+poetry run ruff check .
+Result: passed, All checks passed!
+
+poetry run mypy app tests
+Result: passed, Success: no issues found in 228 source files.
+
+poetry run pytest tests/test_alembic_migrations.py tests/test_migrations_runner.py tests/db/repo/test_usajobs_sync_event_repo.py tests/db/repo/test_saved_search_ingested_job_repo.py tests/services/test_usajobs_ingestion_service.py tests/api/v1/test_ops.py tests/scripts/test_usajobs_staging_validation_cli.py -q --cov=app --cov-fail-under=0
+Result: passed, 76 passed, 1 skipped in 53.38s.
+
+poetry run pytest --collect-only -q
+Result: command exited 0 and collected 360 tests in 9.65s. The coverage plugin printed "FAIL Required test coverage of 90% not reached" because collect-only does not execute tests.
+
+git diff --check -- app docs scripts tests alembic
+Result: passed.
+```
+
+### Patch Artifacts
+```text
+Artifact size command used: Get-ChildItem artifacts/day-52-usajobs-sync-schema-hardening.patch, artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch | Select-Object Name, Length
+artifacts/day-52-usajobs-sync-schema-hardening.patch - 21811304 bytes
+artifacts/day-52-usajobs-sync-schema-hardening-this-run.patch - 280106 bytes
+```
+
+### Remaining Day 53+ Blockers
+- Day 53 full pytest runtime triage.
+- Day 54 actual staging dry-run/write/repeat validation.
+- Day 55 public job page sync contract.
+- Day 56 production rollout readiness.
+- Day 52 deferred schema rebuild follow-ups remain open: retroactive `job_change_log.sync_run_id` foreign key and CHECK constraints for existing status/event/lifecycle fields.
+- Day 49 follow-ups remain open: telework negative phrase handling, `source.mapper_version` hash behavior decision, and explicit JSON key-order hash stability test.
+- Day 50 follow-ups remain open: direct `max_pages_reached` and `max_records_reached` close-missing skip tests, lifecycle date parsing hardening, expired-new queue semantics decision, and complete-close/reappeared-job repeat-run idempotency tests.

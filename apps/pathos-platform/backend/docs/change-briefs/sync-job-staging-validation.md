@@ -1,0 +1,29 @@
+# Sync Job Staging Validation
+
+## What Changed
+
+This change makes the USAJOBS sync path safer to test before production. It adds deterministic fixture tests, a dry-run path, a small staging validation script, sync run health output, and a runbook for validating the job with a narrow USAJOBS partition.
+
+The sync still uses only the official USAJOBS API. No scraping was added.
+
+## Why Staging Validation Matters
+
+Federal job data changes frequently. A staging validation pass lets us prove that new jobs, repeated jobs, changed jobs, and closed jobs are handled correctly before the production scheduler depends on the pipeline.
+
+The dry-run mode now lets operators fetch and normalize real USAJOBS data without writing staging records, upstream audit rows, sync runs, change logs, alert/indexing event accounting rows, or cache entries. That read-only behavior covers both successful dry-runs and upstream failures. The limited write mode then tests the real persistence path with a small slice, such as series `2210`, Florida, last 7 days, and 1-2 pages, but only after the operator selects a safe environment and passes `--confirm-staging-write`.
+
+## How Duplicate, Stale, And Expired Job Risks Are Controlled
+
+Duplicate jobs are controlled by a unique `saved_search_id, job_id` key. Running the same sync twice updates the existing row instead of creating duplicates.
+
+Stale updates are reduced by hashing only meaningful canonical job fields. A refreshed source retrieval timestamp alone does not make an unchanged job look updated.
+
+Expired or closed jobs are handled through an explicit close-missing mode. Limited staging validation does not close missing jobs because a 1-2 page slice is not a complete partition.
+
+Alert and indexing behavior is queue-only for this staging validation slice. The sync now records durable, deduped queue rows for alert and indexing work, but it does not send real email and does not call external indexing APIs.
+
+## What Remains Before Production
+
+Before production, operators still need canonical USAJOBS field normalization, a final approved staging write run, a repeat-run idempotency check, review of the sync health output, and confirmation that production scheduler settings remain unchanged.
+
+Real external indexing submission remains out of scope unless a separate explicit opt-in flag and production approval are added later.

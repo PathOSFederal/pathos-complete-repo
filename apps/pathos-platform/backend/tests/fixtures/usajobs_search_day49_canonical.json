@@ -1,0 +1,281 @@
+{
+  "SearchResult": {
+    "SearchResultCountAll": 5,
+    "SearchResultItems": [
+      {
+        "MatchedObjectId": "800000001",
+        "MatchedObjectDescriptor": {
+          "PositionID": "DE-800000001-26",
+          "PositionTitle": "IT Specialist (Policy and Planning)",
+          "OrganizationName": "Office of Personnel Management",
+          "DepartmentName": "Office of Personnel Management",
+          "PositionLocationDisplay": "Anywhere in the U.S. (remote job)",
+          "PositionLocation": [
+            {
+              "LocationName": "Anywhere in the U.S. (remote job)"
+            }
+          ],
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "99200",
+              "MaximumRange": "153354"
+            }
+          ],
+          "JobCategory": [
+            {
+              "Code": "2210",
+              "Name": "Information Technology Management"
+            }
+          ],
+          "JobGrade": [
+            {
+              "Code": "GS-13",
+              "Name": "13"
+            }
+          ],
+          "UserArea": {
+            "Details": {
+              "LowGrade": "13",
+              "HighGrade": "13",
+              "DepartmentName": "Office of Personnel Management",
+              "PositionURI": "https://www.usajobs.gov/job/800000001",
+              "ApplyURI": [
+                "https://www.usajobs.gov/job/800000001/apply"
+              ],
+              "RemoteIndicator": true,
+              "TeleworkEligible": false,
+              "PublicationStartDate": "2026-06-01",
+              "ApplicationCloseDate": "2027-06-15",
+              "MajorDuties": [
+                "Build secure workforce systems.",
+                "Coordinate incident response planning."
+              ],
+              "RequiredDocuments": "<ul><li>Resume</li><li>SF-50</li></ul>",
+              "QualificationsRequired": "One year of specialized experience supporting federal IT systems.",
+              "QualificationSummary": "Experience with secure cloud delivery is qualifying.",
+              "Requirements": "Must be able to obtain a public trust clearance.",
+              "WhoMayApply": "The public",
+              "HiringPath": [
+                {
+                  "Code": "public",
+                  "Name": "Open to the public"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "MatchedObjectId": "800000002",
+        "MatchedObjectDescriptor": {
+          "PositionID": "MP-800000002-26",
+          "PositionTitle": "Program Analyst",
+          "OrganizationName": "Department of Veterans Affairs",
+          "DepartmentName": "Department of Veterans Affairs",
+          "PositionLocationDisplay": "Washington, District of Columbia",
+          "PositionLocation": [
+            {
+              "LocationName": "Washington, District of Columbia"
+            }
+          ],
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "82864",
+              "MaximumRange": "128956"
+            }
+          ],
+          "JobCategory": [
+            {
+              "Code": "0343",
+              "Name": "Management And Program Analysis"
+            }
+          ],
+          "JobGrade": [
+            {
+              "Code": "GS-12",
+              "Name": "12"
+            }
+          ],
+          "UserArea": {
+            "Details": {
+              "LowGrade": "12",
+              "HighGrade": "12",
+              "PositionURI": "https://www.usajobs.gov/job/800000002",
+              "ApplyURI": [
+                "https://www.usajobs.gov/job/800000002/apply"
+              ],
+              "RemoteIndicator": false,
+              "TeleworkEligible": true,
+              "PublicationStartDate": "2026-06-02",
+              "ApplicationCloseDate": "2027-06-16",
+              "MajorDuties": "Evaluate program metrics and brief leadership.",
+              "RequiredDocuments": [
+                "Resume",
+                "Transcripts"
+              ],
+              "QualificationsRequired": "Specialized experience evaluating federal programs.",
+              "Requirements": "This position is telework eligible under agency policy.",
+              "WhoMayApply": "Federal employees",
+              "HiringPath": [
+                {
+                  "Code": "fed-competitive",
+                  "Name": "Federal employees - Competitive service"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "MatchedObjectId": "800000003",
+        "MatchedObjectDescriptor": {
+          "PositionID": "DE-800000003-26",
+          "PositionTitle": "Information Security Specialist",
+          "OrganizationName": "Department of Homeland Security",
+          "DepartmentName": "Department of Homeland Security",
+          "PositionLocationDisplay": "Location Negotiable After Selection",
+          "PositionLocation": [
+            {
+              "LocationName": "Location Negotiable After Selection"
+            }
+          ],
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "72553",
+              "MaximumRange": "113047"
+            }
+          ],
+          "JobCategory": [
+            {
+              "Code": "2210",
+              "Name": "Information Technology Management"
+            }
+          ],
+          "JobGrade": [
+            {
+              "Code": "GS-11",
+              "Name": "11"
+            }
+          ],
+          "UserArea": {
+            "Details": {
+              "LowGrade": "11",
+              "HighGrade": "12",
+              "PositionURI": "https://www.usajobs.gov/job/800000003",
+              "ApplyURI": [
+                "https://www.usajobs.gov/job/800000003/apply"
+              ],
+              "RemoteIndicator": false,
+              "PublicationStartDate": "2026-06-03",
+              "ApplicationCloseDate": "2027-06-17",
+              "MajorDuties": "Monitor vulnerabilities and coordinate remediation.",
+              "RequiredDocuments": "Resume",
+              "QualificationsRequired": "Experience assessing information systems risk."
+            }
+          }
+        }
+      },
+      {
+        "MatchedObjectId": "800000004",
+        "MatchedObjectDescriptor": {
+          "PositionID": "DE-800000004-26",
+          "PositionTitle": "Human Resources Specialist",
+          "OrganizationName": "Department of Labor",
+          "DepartmentName": "Department of Labor",
+          "PositionLocationDisplay": "Tampa, Florida; Orlando, Florida",
+          "PositionLocation": [
+            {
+              "LocationName": "Tampa, Florida"
+            },
+            {
+              "LocationName": "Orlando, Florida"
+            }
+          ],
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "60266",
+              "MaximumRange": "95543"
+            }
+          ],
+          "JobCategory": [
+            {
+              "Code": "0201",
+              "Name": "Human Resources Management"
+            }
+          ],
+          "JobGrade": [
+            {
+              "Code": "GS-09",
+              "Name": "09"
+            }
+          ],
+          "UserArea": {
+            "Details": {
+              "LowGrade": "09",
+              "HighGrade": "11",
+              "PositionURI": "https://www.usajobs.gov/job/800000004",
+              "ApplyURI": [
+                "https://www.usajobs.gov/job/800000004/apply"
+              ],
+              "RemoteIndicator": false,
+              "TeleworkEligible": false,
+              "PublicationStartDate": "2026-06-04",
+              "ApplicationCloseDate": "2027-06-18",
+              "MajorDuties": "Advise managers on staffing actions.",
+              "RequiredDocuments": "Resume",
+              "QualificationsRequired": "Experience applying federal HR policy."
+            }
+          }
+        }
+      },
+      {
+        "MatchedObjectId": "800000005",
+        "MatchedObjectDescriptor": {
+          "PositionID": "DE-800000005-26",
+          "PositionTitle": "Budget Analyst",
+          "OrganizationName": "Department of the Treasury",
+          "DepartmentName": "Department of the Treasury",
+          "PositionLocationDisplay": "Atlanta, Georgia",
+          "PositionLocation": [
+            {
+              "LocationName": "Atlanta, Georgia"
+            }
+          ],
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "63235",
+              "MaximumRange": "98507"
+            }
+          ],
+          "JobCategory": [
+            {
+              "Code": "0560",
+              "Name": "Budget Analysis"
+            }
+          ],
+          "JobGrade": [
+            {
+              "Code": "GS-11",
+              "Name": "11"
+            }
+          ],
+          "UserArea": {
+            "Details": {
+              "LowGrade": "11",
+              "HighGrade": "11",
+              "PositionURI": "https://www.usajobs.gov/job/800000005",
+              "ApplyURI": [
+                "https://www.usajobs.gov/job/800000005/apply"
+              ],
+              "PublicationStartDate": "2026-06-05",
+              "ApplicationCloseDate": "2027-06-19",
+              "MajorDuties": "Prepare budget estimates.",
+              "RequiredDocuments": "Resume",
+              "QualificationsRequired": "Experience with budget formulation."
+            }
+          }
+        }
+      }
+    ]
+  }
+}

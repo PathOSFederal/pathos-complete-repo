@@ -11,6 +11,7 @@ from app.models.job_search import JobSearchRequest, JobSearchResponse
 from app.models.saved_search import SavedSearchCreateRequest
 from app.services.saved_search_runner_service import SavedSearchRunnerService
 from app.services.saved_search_service import SavedSearchService
+from usajobs_execution_helper import execution_from_response
 
 
 def _usajobs_payload(*, job_id: str = "J-001") -> dict:
@@ -88,8 +89,10 @@ def test_use_case__alerts_run_happy_path_attempts_upstream_writes_audit_and_crea
     with sqlite3.connect(db_path) as conn:
         audit_count = conn.execute("SELECT COUNT(1) FROM upstream_api_audit_records WHERE endpoint = '/api/search'").fetchone()
         digest_count = conn.execute("SELECT COUNT(1) FROM alert_digests").fetchone()
+        ingested_count = conn.execute("SELECT COUNT(1) FROM saved_search_ingested_jobs").fetchone()
     assert audit_count is not None and int(audit_count[0]) == 1
     assert digest_count is not None and int(digest_count[0]) >= 1
+    assert ingested_count is not None and int(ingested_count[0]) >= 1
 
 
 def test_use_case__saved_search_runner_same_input_produces_same_fingerprint_and_order(monkeypatch, tmp_path) -> None:
@@ -141,7 +144,14 @@ def test_use_case__saved_search_runner_same_input_produces_same_fingerprint_and_
             request_id="req-deterministic",
         )
 
-    monkeypatch.setattr("app.services.job_search_service.JobSearchService.search_jobs", _fake_search)
+    fake_response = _fake_search(
+        search=JobSearchRequest(keyword="analyst"),
+        request_id="req-deterministic",
+    )
+    monkeypatch.setattr(
+        "app.services.job_search_service.JobSearchService.execute_search",
+        lambda *a, **k: execution_from_response(fake_response),
+    )
     created = SavedSearchService.create(
         SavedSearchCreateRequest(name="Determinism", query=JobSearchRequest(keyword="analyst"))
     )
